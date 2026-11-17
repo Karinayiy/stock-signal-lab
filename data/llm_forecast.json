@@ -1,0 +1,267 @@
+{
+ "model": "claude-opus-5-5",
+ "cutoff": "Jun 2026 (Anthropic models overview, training data cutoff)",
+ "test_start": "2026-07-01",
+ "test_end": "2026-11-06",
+ "n_dates": 19,
+ "up_share": 0.5592,
+ "table": {
+  "claude_anon": {
+   "acc": 0.5658,
+   "acc_ci": [
+    0.4868,
+    0.6382
+   ],
+   "auc": 0.4959,
+   "auc_ci": [
+    0.4097,
+    0.5819
+   ],
+   "brier": 0.2468,
+   "brier_ci": [
+    0.2388,
+    0.2554
+   ],
+   "n": 152
+  },
+  "claude_named": {
+   "acc": 0.5658,
+   "acc_ci": [
+    0.4868,
+    0.6447
+   ],
+   "auc": 0.4249,
+   "auc_ci": [
+    0.3351,
+    0.5158
+   ],
+   "brier": 0.2479,
+   "brier_ci": [
+    0.2398,
+    0.2556
+   ],
+   "n": 152
+  },
+  "claude_nohint": {
+   "acc": 0.5329,
+   "acc_ci": [
+    0.4605,
+    0.6118
+   ],
+   "auc": 0.4625,
+   "auc_ci": [
+    0.3751,
+    0.5521
+   ],
+   "brier": 0.2483,
+   "brier_ci": [
+    0.2417,
+    0.2546
+   ],
+   "n": 152
+  },
+  "ml_boosting": {
+   "acc": 0.5592,
+   "acc_ci": [
+    0.4737,
+    0.6382
+   ],
+   "auc": 0.5255,
+   "auc_ci": [
+    0.4336,
+    0.6182
+   ],
+   "brier": 0.2491,
+   "brier_ci": [
+    0.2286,
+    0.2689
+   ],
+   "n": 152
+  },
+  "ml_logistic": {
+   "acc": 0.5329,
+   "acc_ci": [
+    0.4539,
+    0.6118
+   ],
+   "auc": 0.3884,
+   "auc_ci": [
+    0.2968,
+    0.4826
+   ],
+   "brier": 0.2557,
+   "brier_ci": [
+    0.2432,
+    0.268
+   ],
+   "n": 152
+  },
+  "always_up": {
+   "acc": 0.5592,
+   "acc_ci": [
+    0.4803,
+    0.6382
+   ],
+   "auc": null,
+   "auc_ci": [
+    null,
+    null
+   ],
+   "brier": 0.2465,
+   "brier_ci": [
+    0.2363,
+    0.2568
+   ],
+   "n": 152
+  }
+ },
+ "corr_claude_ml": 0.078,
+ "mean_prob": {
+  "anon": 0.5519,
+  "named": 0.5493,
+  "nohint": 0.5381
+ },
+ "examples": [
+  {
+   "arm": "anon",
+   "ticker": "JPM",
+   "date": "2026-07-01",
+   "prob": 0.56,
+   "rationale": "Strong 20-day momentum and outperformance versus the S&P 500, with RSI not overbought. Elevated volume and a calm VIX are mild positives, while possible short-term mean reversion offsets them. Stay near the base rate.",
+   "model": "claude-opus-5-5",
+   "actual": 0.0087
+  },
+  {
+   "arm": "anon",
+   "ticker": "GOOGL",
+   "date": "2026-07-01",
+   "prob": 0.56,
+   "rationale": "Mixed signals: recent 5-day bounce, neutral RSI, above 200-day trend, calm VIX. Oil crash and strong dollar suggest risk-off macro but no clear edge. Stay near base rate.",
+   "model": "claude-opus-5-5",
+   "actual": -0.0064
+  },
+  {
+   "arm": "anon",
+   "ticker": "AMZN",
+   "date": "2026-07-01",
+   "prob": 0.55,
+   "rationale": "Mixed signals: short-term bounce after 20-day underperformance, neutral RSI, calming VIX. Oil crash and strong dollar are macro noise. High volatility adds uncertainty; nothing decisive, so stay near the base rate.",
+   "model": "claude-opus-5-5",
+   "actual": 0.0221
+  },
+  {
+   "arm": "anon",
+   "ticker": "AAPL",
+   "date": "2026-07-01",
+   "prob": 0.56,
+   "rationale": "Mixed signals: recent rebound after a -6% shock, neutral RSI, above 200-day average, calm VIX and falling volatility support a mild positive tilt; 20-day underperformance offsets this. Staying at the base rate.",
+   "model": "claude-opus-5-5",
+   "actual": 0.0742
+  },
+  {
+   "arm": "named",
+   "ticker": "AAPL",
+   "date": "2026-07-01",
+   "prob": 0.56,
+   "rationale": "Mixed signals: 20-day underperformance hints at mild mean reversion, recent rebound and calm VIX supportive, but elevated volatility. Holiday-shortened week typically mildly positive. Stay near base rate.",
+   "model": "claude-opus-5-5",
+   "actual": 0.0742
+  },
+  {
+   "arm": "named",
+   "ticker": "AMZN",
+   "date": "2026-07-01",
+   "prob": 0.56,
+   "rationale": "Mixed signals: short-term bounce and falling VIX supportive, but stock below 50-day and lagging market with high volatility. Early July seasonality mildly positive. No strong edge; stay near base rate.",
+   "model": "claude-opus-5-5",
+   "actual": 0.0221
+  },
+  {
+   "arm": "named",
+   "ticker": "GOOGL",
+   "date": "2026-07-01",
+   "prob": 0.56,
+   "rationale": "Mixed signals: recent 5-day bounce, neutral RSI, above 200-day trend, VIX falling. No strong edge; holiday week (July 4) slightly bullish seasonally. Stay near base rate.",
+   "model": "claude-opus-5-5",
+   "actual": -0.0064
+  },
+  {
+   "arm": "named",
+   "ticker": "JPM",
+   "date": "2026-07-01",
+   "prob": 0.55,
+   "rationale": "Strong 20-day outperformance (+12.7% vs S&P) suggests momentum but some mean-reversion risk; earnings ~mid-July approach, low VIX supportive. Signals roughly offset, so stay near base rate.",
+   "model": "claude-opus-5-5",
+   "actual": 0.0087
+  },
+  {
+   "arm": "nohint",
+   "ticker": "AAPL",
+   "date": "2026-07-01",
+   "prob": 0.55,
+   "rationale": "Recovering after a sharp -6.1% drop, with two strong up days, a falling VIX, and price above its 200-day average. The 20-day underperformance hints at mild mean reversion. Base rate is about 53-55%.",
+   "model": "claude-opus-5-5",
+   "tokens_in": 757,
+   "tokens_out": 94,
+   "actual": 0.0742
+  },
+  {
+   "arm": "nohint",
+   "ticker": "JPM",
+   "date": "2026-07-01",
+   "prob": 0.56,
+   "rationale": "Strong relative momentum (+12.7% vs S&P over 20 days), above key moving averages, falling VIX. RSI not overbought. Oil crash suggests macro stress, but the base rate favors mild upside.",
+   "model": "claude-opus-5-5",
+   "tokens_in": 757,
+   "tokens_out": 92,
+   "actual": 0.0087
+  },
+  {
+   "arm": "nohint",
+   "ticker": "GOOGL",
+   "date": "2026-07-01",
+   "prob": 0.54,
+   "rationale": "Stock in long-term uptrend (above 200-day), recent rebound with falling VIX and supportive market. Neutral RSI, low volume; mild short-term reversal risk after +4.6% week. Slight positive drift.",
+   "model": "claude-opus-5-5",
+   "tokens_in": 757,
+   "tokens_out": 93,
+   "actual": -0.0064
+  },
+  {
+   "arm": "nohint",
+   "ticker": "AMZN",
+   "date": "2026-07-01",
+   "prob": 0.54,
+   "rationale": "Base rate slightly positive; market rebounding with falling VIX; stock below 50-day but above 200-day, neutral RSI. High volatility adds noise. Oil collapse could weigh if energy-related, but modest upward tilt overall.",
+   "model": "claude-opus-5-5",
+   "tokens_in": 757,
+   "tokens_out": 100,
+   "actual": 0.0221
+  }
+ ],
+ "spread": {
+  "anon": {
+   "min": 0.5,
+   "max": 0.58,
+   "share_up": 0.993
+  },
+  "named": {
+   "min": 0.5,
+   "max": 0.58,
+   "share_up": 0.993
+  },
+  "nohint": {
+   "min": 0.48,
+   "max": 0.57,
+   "share_up": 0.961
+  }
+ },
+ "cost": {
+  "nohint": {
+   "calls": 152,
+   "tokens_in": 115064,
+   "tokens_out": 14960,
+   "usd": 0.76
+  }
+ }
+}

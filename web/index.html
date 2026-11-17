@@ -1,0 +1,620 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stock Signal Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: a research notebook — verdict tiles first, then one stock explored in depth,
+   then the cross-stock evidence. Neutrals lean slightly blue toward the accent. */
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #0f1419; --ink-2: #4a5260; --ink-3: #7b8494;
+  --line: #e2e6ec; --grid: #edf0f4; --accent: #2a78d6; --accent-soft: #e6f0fb;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --pos: #2a78d6; --neg: #e34948; --mid: #f0efec;
+  --good: #0ca30c; --warn: #b07a00; --bad: #d03b3b;
+  --f-display: "Space Grotesk", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121519; --panel: #1a1e24; --ink: #eef1f5; --ink-2: #b4bcc8; --ink-3: #8790a0;
+  --line: #2c323b; --grid: #232830; --accent: #3987e5; --accent-soft: #1c2b3f;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --pos: #3987e5; --neg: #e66767; --mid: #383835;
+  --good: #0ca30c; --warn: #fab219; --bad: #e66767; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #121519; --panel: #1a1e24; --ink: #eef1f5; --ink-2: #b4bcc8; --ink-3: #8790a0;
+  --line: #2c323b; --grid: #232830; --accent: #3987e5; --accent-soft: #1c2b3f;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --pos: #3987e5; --neg: #e66767; --mid: #383835;
+  --good: #0ca30c; --warn: #fab219; --bad: #e66767; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 700; }
+h2 { font-size: 22px; font-weight: 600; }
+h3 { font-size: 15px; font-weight: 600; }
+p { margin: 0; max-width: 72ch; }
+.eyebrow { font: 500 12px var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.muted { color: var(--ink-3); font-size: 13px; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+header { display: grid; gap: 10px; }
+header .meta { font: 12px var(--f-mono); color: var(--ink-3); }
+
+section { display: grid; gap: 18px; }
+.sec-head { display: grid; gap: 6px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; display: grid; gap: 12px; align-content: start; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+#signal td { white-space: normal; }
+@media (max-width: 860px) { .grid3 { grid-template-columns: 1fr; } }
+
+/* verdict tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 6px; align-content: start; }
+.tile .label { font-size: 13px; color: var(--ink-2); }
+.tile .big { font: 600 30px var(--f-display); font-variant-numeric: tabular-nums; }
+.tile .vs { font: 13px var(--f-mono); color: var(--ink-3); }
+.verdict { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; border-radius: 10px;
+  background: var(--accent-soft); border: 1px solid var(--line); }
+.verdict b { font-family: var(--f-display); }
+
+/* ticker picker */
+.picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.picker button { font: 500 14px var(--f-mono); padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.picker button:hover { border-color: var(--accent); }
+.picker button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.chart { position: relative; height: 300px; }
+.chart.short { height: 170px; }
+.chart.tall { height: 420px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend i.dash { background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px) !important; height: 2px; }
+
+/* signal card */
+.signal { display: grid; gap: 10px; }
+.gauge { height: 10px; border-radius: 6px; background: linear-gradient(90deg, var(--neg), var(--mid) 50%, var(--pos)); position: relative; }
+.gauge b { position: absolute; top: -5px; width: 4px; height: 20px; border-radius: 2px; background: var(--ink); transform: translateX(-2px); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--f-mono); padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); }
+[hidden] { display: none !important; }
+.appbar { grid-template-columns: 1fr auto; align-items: center; }
+.appbar > * { min-width: 0; }
+.appbar .pill { white-space: normal; }
+.appbar .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 700px) { .appbar { grid-template-columns: 1fr; } }
+.btn { font: 500 13px var(--f-body); padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+.btn.ghost { background: var(--panel); color: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.log { grid-column: 1 / -1; font: 12px/1.5 var(--f-mono); color: var(--ink-2); background: var(--grid);
+  border-radius: 6px; padding: 8px 10px; max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+#live { display: grid; gap: 8px; }
+.answer { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+.panel > .pill { justify-self: start; }
+.pill.up { color: var(--pos); } .pill.down { color: var(--neg); } .pill.flat { color: var(--ink-2); }
+
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-weight: 500; color: var(--ink-2); font-size: 12px; }
+td { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.tbl { overflow-x: auto; }
+td.win { color: var(--good); font-weight: 500; } td.lose { color: var(--ink-3); }
+
+/* news list */
+.news { display: grid; gap: 0; max-height: 360px; overflow-y: auto; }
+.news .nh { font-size: 11px; color: var(--ink-3); text-align: right; }
+.news .nh span:last-child { text-align: left; }
+.pill.rel { color: var(--good); }
+.news .pill { font-size: 10px; padding: 1px 7px; margin-left: 4px; }
+.news div { display: grid; grid-template-columns: 50px 50px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.news .sc { font: 500 12px var(--f-mono); text-align: right; }
+.news .src { color: var(--ink-3); font-size: 12px; }
+
+/* heatmap */
+.heat { overflow-x: auto; }
+.heat table { width: auto; }
+.heat td, .heat th { text-align: center; padding: 0; border: 2px solid var(--panel); }
+.heat td { width: 46px; height: 32px; font-size: 11px; color: var(--ink); }
+.heat th { font-size: 11px; padding: 4px 6px; }
+.heat th.row { text-align: right; }
+.scale { display: flex; align-items: center; gap: 8px; font: 12px var(--f-mono); color: var(--ink-3); }
+.scale i { width: 160px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--neg), var(--mid), var(--pos)); }
+
+.method { display: grid; gap: 10px; font-size: 14px; }
+.method li { margin-bottom: 6px; }
+.method ul { margin: 0; padding-left: 20px; max-width: 80ch; }
+code { font: 13px var(--f-mono); background: var(--grid); padding: 1px 5px; border-radius: 4px; }
+#err { color: var(--bad); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Student research project</div>
+    <h1>Stock Signal Lab</h1>
+    <p>Can technical indicators, macro data, earnings and news predict where a stock goes over the next <b id="hz">5</b> trading days? This dashboard tests that honestly, with walk-forward backtests on data the model never saw.</p>
+    <div class="meta" id="meta">Loading data…</div>
+    <div id="err"></div>
+    <div class="panel appbar" id="appbar" hidden></div>
+  </header>
+
+  <!-- 1. Verdict -->
+  <section>
+    <div class="sec-head"><div class="eyebrow">1 · Verdict</div><h2>Does the model beat a naive guess?</h2></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="verdict" id="verdict"></div>
+  </section>
+
+  <!-- 2. Explorer -->
+  <section>
+    <div class="sec-head"><div class="eyebrow">2 · Stock explorer</div><h2>One stock, end to end</h2>
+      <p class="muted">Pick a stock. Everything in sections 2 and 3 follows this choice.</p></div>
+    <div class="picker" id="picker" role="group" aria-label="Choose stock"></div>
+    <div class="grid3">
+      <div class="panel">
+        <h3>Price and moving averages</h3>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Close</span><span><i style="background:var(--s2)"></i>50-day average</span><span><i style="background:var(--s3)"></i>200-day average</span></div>
+        <div class="chart"><canvas id="cPrice"></canvas></div>
+        <h3>Model's probability the stock rises in the next 5 days</h3>
+        <div class="chart short"><canvas id="cProb"></canvas></div>
+        <p class="muted">Above 50% the backtest holds the stock, below it holds cash. Each point comes from a model trained only on earlier years.</p>
+      </div>
+      <div class="panel signal" id="signal"></div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Backtest: follow the model vs just hold</h3>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Follow model</span><span><i style="background:var(--s2)"></i>Buy and hold</span></div>
+        <div class="chart"><canvas id="cEq"></canvas></div>
+        <div class="tbl"><table id="tStats"></table></div>
+      </div>
+      <div class="panel">
+        <h3>Latest news sentiment</h3>
+        <p class="muted" id="sentNote"></p>
+        <div class="news" id="news"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Relationships -->
+  <section>
+    <div class="sec-head"><div class="eyebrow">3 · Relationships</div><h2>Explaining a move is not predicting it</h2>
+      <p>Same-day correlation asks whether the stock and the factor move together today. Next-day correlation asks whether today's factor move tells you anything about tomorrow. Only the second helps a forecast.</p></div>
+    <div class="grid2">
+      <div class="panel">
+        <h3 id="sdTitle">Same-day vs next-day correlation</h3>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Same day</span><span><i style="background:var(--s2)"></i>Next day</span></div>
+        <div class="chart"><canvas id="cSame"></canvas></div>
+      </div>
+      <div class="panel">
+        <h3 id="rcTitle">Rolling 120-day correlation</h3>
+        <div class="legend"><span><i style="background:var(--s1)"></i>S&amp;P 500</span><span><i style="background:var(--s2)"></i>VIX</span><span><i style="background:var(--s3)"></i>10y yield</span></div>
+        <div class="chart"><canvas id="cRoll"></canvas></div>
+        <p class="muted">Relationships drift over time, which is one reason models trained on the past struggle.</p>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Daily return correlations since <span class="ftY"></span></h3>
+      <div class="scale"><span>−1</span><i></i><span>+1</span></div>
+      <div class="heat" id="heat"></div>
+    </div>
+  </section>
+
+  <!-- 4. Features -->
+  <section>
+    <div class="sec-head"><div class="eyebrow">4 · Feature evidence</div><h2>Which data carries any signal?</h2>
+      <p>Information coefficient (IC) is the rank correlation between a feature today and the stock's return over the next 5 days. Professionals treat an IC of 0.02–0.05 as useful if it holds up year after year. "Stable" is the share of years where the sign matched.</p></div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="legend"><span><i style="background:var(--s1)"></i>Technical</span><span><i style="background:var(--s2)"></i>Macro</span><span><i style="background:var(--s3)"></i>Fundamental</span></div>
+        <div class="chart tall"><canvas id="cIC"></canvas></div>
+      </div>
+      <div class="panel">
+        <h3>IC table, all stocks pooled</h3>
+        <div class="tbl"><table id="tIC"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Model report -->
+  <section>
+    <div class="sec-head"><div class="eyebrow">5 · Model report</div><h2>Walk-forward results, year by year</h2>
+      <p>AUC measures ranking skill: 0.5 is a coin flip, 1.0 is perfect. Accuracy must be compared with the "always guess up" baseline, because stocks rise more often than they fall.</p></div>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Accuracy by test year</h3>
+        <div class="tbl"><table id="tYear"></table></div>
+      </div>
+      <div class="panel">
+        <h3>AUC by experiment</h3>
+        <div class="chart"><canvas id="cAbl"></canvas></div>
+        <p class="muted">The shuffled-label run is a leak check: the model is trained on scrambled answers, so it should score near 0.5. If it scored high, the pipeline would be leaking future data.</p>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Permutation importance (gradient boosting, test from <span id="impFrom"></span>)</h3>
+      <p class="muted">How much AUC drops when one feature is scrambled. With AUC this close to 0.5, these rankings are mostly noise and change from period to period.</p>
+      <div class="chart"><canvas id="cImp"></canvas></div>
+    </div>
+  </section>
+
+  <!-- 6. Volatility -->
+  <section>
+    <div class="sec-head"><div class="eyebrow">6 · Volatility</div><h2>How much it moves is predictable</h2>
+      <p>Direction is close to a coin flip, but the size of the next move is not. Calm weeks tend to follow calm weeks and wild weeks follow wild weeks. The same features and the same walk-forward test predict next week's volatility well.</p></div>
+    <div class="tiles" id="volTiles"></div>
+    <div class="panel">
+      <h3 id="volTitle">Predicted vs realized volatility</h3>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Realized (next 5 days)</span><span><i style="background:var(--s2)"></i>Boosting forecast</span><span><i style="background:var(--s3)"></i>Naive: last 20 days</span></div>
+      <div class="chart"><canvas id="cVol"></canvas></div>
+      <p class="muted">Annualized volatility, one point per week, out of sample. R² is measured on log volatility across all 8 stocks: the share of week-to-week variation the forecast explains. Useful for sizing positions and options pricing, even though it says nothing about direction.</p>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h3 id="sizeTitle">Putting it to use: hold less when a storm is forecast</h3>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Sized by volatility forecast</span><span><i style="background:var(--s2)"></i>Buy and hold</span><span><i style="background:var(--s3)"></i>Sized by last 20 days</span></div>
+        <div class="chart"><canvas id="cSize"></canvas></div>
+        <p class="muted">Each week the position is set to (typical forecast volatility so far) ÷ (this week's forecast), capped at 100%, with the rest in cash. No borrowing, no look-ahead, 5 bps cost per change.</p>
+      </div>
+      <div class="panel">
+        <h3>Average across all 8 stocks</h3>
+        <div class="tbl"><table id="tSize"></table></div>
+        <p class="muted">Columns: sized by the volatility forecast, buy and hold, sized by the last 20 days. Worst drop is the largest fall from a peak.</p>
+        <p class="muted" id="sizeNote"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Claude as forecaster -->
+  <section>
+    <div class="sec-head"><div class="eyebrow">7 · Large language model</div><h2>Can Claude beat the model?</h2>
+      <p>Claude gets the same numbers as the ML model, written as a short analyst briefing, and gives a probability that the stock rises over the next 5 days. To stop it from "remembering" the answers, only dates after its training-data cutoff are tested.</p></div>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Experiment design</h3>
+        <div class="tbl"><table id="tLlmDesign"></table></div>
+      </div>
+      <div class="panel" id="llmResults"></div>
+    </div>
+    <div class="panel" id="llmExamples" hidden></div>
+  </section>
+
+  <!-- 8. Method -->
+  <section>
+    <div class="sec-head"><div class="eyebrow">8 · Method</div><h2>How this was built</h2></div>
+    <div class="panel method" id="method"></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const pct = (x, k = 1) => x == null ? "–" : (x * 100).toFixed(k) + "%";
+const f3 = x => x == null ? "–" : (x >= 0 ? "+" : "") + x.toFixed(3);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const GROUP = { technical: "--s1", macro: "--s2", fundamental: "--s3" };
+let D, cur = "AAPL", charts = {};
+
+function lerp(a, b, t) { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b);
+  return "rgb(" + A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(",") + ")"; }
+function divColor(v) { const m = css("--mid"); return v >= 0 ? lerp(m, css("--pos"), Math.min(1, v)) : lerp(m, css("--neg"), Math.min(1, -v)); }
+
+const crosshair = { id: "crosshair", afterDraw(c) {
+  const a = c.tooltip?.getActiveElements?.(); if (!a || !a.length || c.config.type !== "line") return;
+  const x = a[0].element.x, ctx = c.ctx; ctx.save(); ctx.strokeStyle = css("--ink-3"); ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x, c.chartArea.top); ctx.lineTo(x, c.chartArea.bottom); ctx.stroke(); ctx.restore(); } };
+const refLine = { id: "refLine", beforeDatasetsDraw(c, _, o) {
+  if (o.y == null) return; const y = c.scales.y.getPixelForValue(o.y), ctx = c.ctx; ctx.save();
+  ctx.strokeStyle = css("--ink-3"); ctx.lineWidth = 1; ctx.setLineDash([4, 4]); ctx.beginPath();
+  ctx.moveTo(c.chartArea.left, y); ctx.lineTo(c.chartArea.right, y); ctx.stroke(); ctx.restore(); } };
+Chart.register(crosshair, refLine);
+
+function base(extra = {}) {
+  const ink2 = css("--ink-2"), grid = css("--grid");
+  Chart.defaults.font.family = "IBM Plex Sans, system-ui, sans-serif";
+  Chart.defaults.color = ink2;
+  return { responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: { legend: { display: false }, refLine: {},
+      tooltip: { backgroundColor: css("--panel"), titleColor: css("--ink"), bodyColor: css("--ink-2"),
+        borderColor: css("--line"), borderWidth: 1, padding: 10, boxPadding: 4, usePointStyle: true,
+        bodyFont: { family: "IBM Plex Mono, monospace" } } },
+    scales: { x: { grid: { display: false }, border: { color: css("--line") }, ticks: { maxTicksLimit: 6, maxRotation: 0, callback(v) { const l = String(this.getLabelForValue(v)); return /^\d{4}-\d\d-\d\d$/.test(l) ? l.slice(0, 7) : l; } } },
+      y: { grid: { color: grid }, border: { display: false } } }, ...extra };
+}
+function line(label, data, color, dash) { return { label, data, borderColor: color, backgroundColor: color, borderWidth: 2,
+  pointRadius: 0, pointHoverRadius: 4, borderDash: dash || [], tension: 0, spanGaps: false }; }
+function mk(id, cfg) { charts[id]?.destroy(); charts[id] = new Chart($("#" + id), cfg); }
+
+function renderTiles() {
+  const m = D.model, o = m.overall;
+  const sd = D.meta.tickers.map(t => D.sameday[t]["S&P500"]);
+  const avgSame = sd.reduce((s, x) => s + x[0], 0) / sd.length, avgNext = sd.reduce((s, x) => s + x[1], 0) / sd.length;
+  const tiles = [
+    ["Model accuracy", pct(o.gbm.acc), `vs ${pct(o.base.acc)} always-up`],
+    ["Model AUC (0.5 = coin flip)", o.gbm.auc.toFixed(3), `logistic ${o.logit.auc.toFixed(3)}`],
+    ["Correlation with S&P 500", avgSame.toFixed(2), `same day · next day ${avgNext.toFixed(2)}`],
+    ["Leak check (shuffled labels)", m.shuffled.auc.toFixed(3), "should be ≈ 0.5"],
+  ];
+  $("#tiles").innerHTML = tiles.map(([l, b, v]) => `<div class="tile"><div class="label">${l}</div><div class="big">${b}</div><div class="vs">${v}</div></div>`).join("");
+  $("#verdict").innerHTML = `<div><b>No reliable edge found.</b>
+    <p>Across ${D.meta.n_predictions.toLocaleString()} out-of-sample predictions (${D.meta.first_test_year}–now, 8 stocks), neither model beats "always guess up" on accuracy, and AUC stays near 0.5. Predicting which stock beats the S&amp;P 500 does no better (AUC ${m.excess.gbm.auc.toFixed(3)}). Stocks move strongly <i>with</i> the market on the same day, but today's data says almost nothing about next week. That matches the efficient-market idea: easy, public signals are already priced in.</p></div>`;
+}
+
+function renderPicker() {
+  $("#picker").innerHTML = D.meta.tickers.map(t => `<button type="button" id="pk-${t}" aria-pressed="${t === cur}" data-t="${t}">${t}</button>`).join("");
+  $("#picker").onclick = e => { const t = e.target.dataset?.t; if (!t) return; cur = t;
+    try { localStorage.setItem("ssl-ticker", t); } catch (_) {} renderPicker(); renderStock(); };
+}
+
+function renderStock() {
+  const T = D.tickers[cur], s1 = css("--s1"), s2 = css("--s2"), s3 = css("--s3");
+  const pf = v => v == null ? "–" : "$" + v.toFixed(2);
+  mk("cPrice", { type: "line", data: { labels: T.dates, datasets: [line("Close", T.close, s1), line("SMA50", T.sma50, s2), line("SMA200", T.sma200, s3)] },
+    options: base({ plugins: { ...base().plugins, tooltip: { ...base().plugins.tooltip, callbacks: { label: c => ` ${c.dataset.label}: ${pf(c.raw)}` } } } }) });
+  const pb = base(); pb.scales.y.min = 0.3; pb.scales.y.max = 0.7; pb.scales.y.ticks = { callback: v => (v * 100) + "%", stepSize: 0.1 };
+  pb.plugins.refLine = { y: 0.5 }; pb.plugins.tooltip.callbacks = { label: c => ` P(up): ${pct(c.raw)}` };
+  mk("cProb", { type: "line", data: { labels: T.dates, datasets: [line("P(up)", T.prob, s1)] }, options: pb });
+
+  const B = T.backtest, eb = base(); eb.scales.y.ticks = { callback: v => v + "×" };
+  eb.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${c.raw.toFixed(2)}×` };
+  mk("cEq", { type: "line", data: { labels: B.dates, datasets: [line("Follow model", B.strat, s1), line("Buy & hold", B.bh, s2)] }, options: eb });
+  const S = B.stats_strat, H = B.stats_bh;
+  const row = (l, a, b, f, higher = true) => { const w = higher ? a > b : a < b;
+    return `<tr><td>${l}</td><td class="${w ? "win" : "lose"}">${f(a)}</td><td class="${!w ? "win" : "lose"}">${f(b)}</td></tr>`; };
+  $("#tStats").innerHTML = `<tr><th></th><th>Follow model</th><th>Buy &amp; hold</th></tr>`
+    + row("Annual return", S.cagr, H.cagr, x => pct(x))
+    + row("Sharpe ratio", S.sharpe, H.sharpe, x => x.toFixed(2))
+    + row("Max drawdown", S.maxdd, H.maxdd, x => pct(x))
+    + row("Volatility", S.vol, H.vol, x => pct(x), false)
+    + `<tr><td>Time in market</td><td>${pct(B.time_in_market, 0)}</td><td>100%</td></tr>`
+    + `<tr><td>Trades</td><td>${B.trades}</td><td>1</td></tr>`;
+
+  const L = T.latest, p = L.prob, dir = p > 0.52 ? "up" : p < 0.48 ? "down" : "flat";
+  const lbl = { up: "Leans up", down: "Leans down", flat: "No view" }[dir];
+  const se = D.sentiment[cur];
+  const F = L.features;
+  $("#signal").innerHTML = `<h3>Latest model reading</h3>
+    <div class="muted num">as of ${L.date}</div>
+    <div class="tile" style="border:none;padding:0"><div class="big">${pct(p)}</div><div class="vs">P(${cur} up over next 5 days)</div></div>
+    <div class="gauge" aria-hidden="true"><b style="left:${Math.max(0, Math.min(100, (p - 0.3) / 0.4 * 100))}%"></b></div>
+    <div class="muted num" style="display:flex;justify-content:space-between"><span>30%</span><span>50%</span><span>70%</span></div>
+    <div><span class="pill ${dir}">${lbl}</span></div>
+    <p class="muted">Test AUC for ${cur}: <b class="num">${T.scores.auc.toFixed(3)}</b>. Treat this as a classroom demo, not trading advice.</p>
+    <div class="tbl"><table>
+      <tr><td>RSI(14)</td><td>${F.rsi_14.toFixed(1)}</td></tr>
+      <tr><td>vs 200-day avg</td><td>${pct(F.dist_sma200)}</td></tr>
+      <tr><td>20-day volatility</td><td>${pct(F.vol_20, 0)}</td></tr>
+      <tr><td>Forecast volatility, next 5 days</td><td>${D.volatility ? pct(D.volatility.latest[cur].pred, 0) : "–"}</td></tr>
+      <tr><td>VIX</td><td>${F.vix.toFixed(1)}</td></tr>
+      <tr><td>Last EPS surprise</td><td>${F.eps_surprise == null ? "–" : F.eps_surprise.toFixed(1) + "%"}</td></tr>
+      <tr><td>News sentiment (${se.llm_avg != null ? "Claude" : "words"})</td><td>${f3(se.llm_avg != null ? se.llm_avg : se.avg)}</td></tr>
+    </table></div>
+    <div id="live"></div>`;
+  drawLive();
+
+  const SM = D.sentiment._meta || {}, days = (se.daily || []).length;
+  const llmLine = SM.llm
+    ? `<b>Claude</b> (${esc(SM.model)}) read each headline: ${se.llm_relevant} of ${se.n} are really about ${cur}, average score <b class="num">${f3(se.llm_avg)}</b>.`
+    : `<b>Claude scoring is off</b>: no Anthropic API key was set when the data was built, so only the word-list (VADER) score is shown.`;
+  $("#sentNote").innerHTML = `${llmLine}<br>Word-list average: <b class="num">${f3(se.avg)}</b> (−1 … +1). Archive: ${SM.archive_rows || 0} headlines across all stocks, ${days} day(s) of news for ${cur}; once it covers a few months it can be tested as a model feature.`;
+  const col = v => v == null ? "var(--ink-3)" : v > 0.05 ? "var(--pos)" : v < -0.05 ? "var(--neg)" : "var(--ink-3)";
+  $("#news").innerHTML = `<div class="nh"><span>Words</span><span>Claude</span><span>Headline</span></div>` + se.items.map(n => {
+    const tag = n.relevant == null ? "" : n.relevant ? `<span class="pill rel">relevant</span>` : `<span class="pill">other company</span>`;
+    const why = n.reason ? `<br><span class="src">Claude: ${esc(n.reason)}</span>` : "";
+    return `<div><span class="sc" style="color:${col(n.score)}">${f3(n.score)}</span><span class="sc" style="color:${col(n.llm)}">${n.llm == null ? "–" : f3(n.llm)}</span><span>${esc(n.title)} ${tag}<br><span class="src">${esc(n.source)} · ${esc(n.date)}</span>${why}</span></div>`; }).join("");
+
+  renderVol();
+  // relationships
+  const sd = D.sameday[cur], names = Object.keys(sd);
+  $("#sdTitle").innerHTML = `${cur}: same-day vs next-day correlation`;
+  const bo = base({ interaction: { mode: "index", intersect: false } }); bo.scales.y.min = -0.8; bo.scales.y.max = 0.8; bo.plugins.refLine = { y: 0 };
+  bo.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${f3(c.raw)}` };
+  mk("cSame", { type: "bar", data: { labels: names, datasets: [
+    { label: "Same day", data: names.map(n => sd[n][0]), backgroundColor: s1, borderRadius: 4, borderSkipped: false, barPercentage: 0.8, categoryPercentage: 0.7 },
+    { label: "Next day", data: names.map(n => sd[n][1]), backgroundColor: s2, borderRadius: 4, borderSkipped: false, barPercentage: 0.8, categoryPercentage: 0.7 }] }, options: bo });
+  const R = D.rolling[cur], ro = base(); ro.scales.y.min = -1; ro.scales.y.max = 1; ro.plugins.refLine = { y: 0 };
+  ro.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${f3(c.raw)}` };
+  $("#rcTitle").innerHTML = `${cur}: rolling 120-day correlation`;
+  mk("cRoll", { type: "line", data: { labels: R.dates, datasets: [line("S&P 500", R.spx, s1), line("VIX", R.vix, s2), line("10y yield", R.tnx, s3)] }, options: ro });
+}
+
+function renderStatic() {
+  const M = D.meta;
+  $("#hz").textContent = M.horizon;
+  $("#meta").textContent = `Data through ${D.tickers[M.tickers[0]].latest.date} · generated ${M.generated} · source: Yahoo Finance`;
+  document.querySelectorAll(".ftY").forEach(e => e.textContent = M.first_test_year);
+
+  const C = D.corr; let h = "<table><tr><th></th>" + C.labels.map(l => `<th>${esc(l)}</th>`).join("") + "</tr>";
+  C.values.forEach((r, i) => { h += `<tr><th class="row">${esc(C.labels[i])}</th>` + r.map((v, j) =>
+    `<td style="background:${divColor(v)}" title="${esc(C.labels[i])} × ${esc(C.labels[j])}: ${v.toFixed(2)}">${i === j ? "" : v.toFixed(2)}</td>`).join("") + "</tr>"; });
+  $("#heat").innerHTML = h + "</table>";
+
+  const order = M.features.map((f, i) => i).sort((a, b) => D.ic.pooled[b] - D.ic.pooled[a]);
+  const io = base({ indexAxis: "y", interaction: { mode: "index", intersect: false } });
+  io.scales = { x: { grid: { color: css("--grid") }, border: { display: false }, ticks: { callback: v => v.toFixed(2) } },
+    y: { grid: { display: false }, ticks: { font: { size: 11 } } } };
+  io.plugins.tooltip.callbacks = { label: c => { const i = order[c.dataIndex]; return [` IC: ${f3(D.ic.pooled[i])}`, ` stable: ${pct(D.ic.stability[i], 0)}`]; } };
+  mk("cIC", { type: "bar", data: { labels: order.map(i => M.feature_names[i]),
+    datasets: [{ data: order.map(i => D.ic.pooled[i]), backgroundColor: order.map(i => css(GROUP[M.feature_groups[i]])), borderRadius: 4, borderSkipped: false, barPercentage: 0.75 }] }, options: io });
+  $("#tIC").innerHTML = "<tr><th>Feature</th><th>IC</th><th>Stable</th></tr>" + order.map(i =>
+    `<tr><td style="font-family:var(--f-body)">${esc(M.feature_names[i])}</td><td>${f3(D.ic.pooled[i])}</td><td>${pct(D.ic.stability[i], 0)}</td></tr>`).join("");
+
+  const Y = D.model.per_year;
+  $("#tYear").innerHTML = "<tr><th>Year</th><th>Up share</th><th>Always-up</th><th>Logistic</th><th>Boosting</th><th>AUC (boost)</th></tr>" +
+    Y.map(r => { const best = Math.max(r.logit_acc, r.gbm_acc) > r.base_acc;
+      return `<tr><td>${r.year}</td><td>${pct(r.up_share)}</td><td>${pct(r.base_acc)}</td><td class="${r.logit_acc > r.base_acc ? "win" : ""}">${pct(r.logit_acc)}</td><td class="${r.gbm_acc > r.base_acc ? "win" : ""}">${pct(r.gbm_acc)}</td><td>${r.gbm_auc.toFixed(3)}</td></tr>`; }).join("")
+    + `<tr><td><b>All</b></td><td></td><td>${pct(D.model.overall.base.acc)}</td><td>${pct(D.model.overall.logit.acc)}</td><td>${pct(D.model.overall.gbm.acc)}</td><td>${D.model.overall.gbm.auc.toFixed(3)}</td></tr>`;
+
+  const A = D.model.ablation, m = D.model;
+  const exps = [["Technical only", A.technical.auc, "--s1"], ["Macro only", A.macro.auc, "--s2"], ["Fundamental only", A.fundamental.auc, "--s3"],
+    ["All features", A.all.auc, "--ink-2"], ["Logistic, all", m.overall.logit.auc, "--ink-2"], ["Beat S&P target", m.excess.gbm.auc, "--ink-2"], ["Shuffled labels", m.shuffled.auc, "--ink-3"]];
+  const ao = base({ indexAxis: "y" }); ao.scales = { x: { min: 0.45, max: 0.55, grid: { color: css("--grid") }, border: { display: false } }, y: { grid: { display: false }, ticks: { font: { size: 11 } } } };
+  ao.plugins.tooltip.callbacks = { label: c => ` AUC: ${c.raw.toFixed(3)}` };
+  const mid = { id: "mid", beforeDatasetsDraw(c) { const x = c.scales.x.getPixelForValue(0.5), ctx = c.ctx; ctx.save(); ctx.strokeStyle = css("--ink-3");
+    ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(x, c.chartArea.top); ctx.lineTo(x, c.chartArea.bottom); ctx.stroke(); ctx.restore(); } };
+  mk("cAbl", { type: "bar", data: { labels: exps.map(e => e[0]), datasets: [{ data: exps.map(e => e[1]), base: 0.5, backgroundColor: exps.map(e => css(e[2])), borderRadius: 4, borderSkipped: false, barPercentage: 0.7 }] }, options: ao, plugins: [mid] });
+
+  const I = m.importance; $("#impFrom").textContent = I.test_from;
+  const io2 = M.features.map((f, i) => i).sort((a, b) => I.mean[b] - I.mean[a]);
+  const po = base(); po.scales.x.ticks = { maxRotation: 50, minRotation: 50, autoSkip: false, font: { size: 10 } };
+  po.plugins.tooltip.callbacks = { label: c => ` AUC drop: ${c.raw.toFixed(4)} ± ${I.std[io2[c.dataIndex]].toFixed(4)}` };
+  mk("cImp", { type: "bar", data: { labels: io2.map(i => M.features[i]), datasets: [{ data: io2.map(i => I.mean[i]), backgroundColor: io2.map(i => css(GROUP[M.feature_groups[i]])), borderRadius: 4, borderSkipped: false }] }, options: po });
+
+  $("#method").innerHTML = `<ul>
+    <li><b>Data</b>: daily prices for ${M.tickers.join(", ")}, plus S&amp;P 500, VIX, 10-year Treasury yield, US dollar index, oil and gold (Yahoo Finance, 2010–now). Earnings surprises from company EPS reports.</li>
+    <li><b>Features</b>: ${M.features.length} signals in three groups (technical, macro, fundamental). Each uses only information available at that day's close; earnings count from the day after release.</li>
+    <li><b>Target</b>: does the stock rise over the next ${M.horizon} trading days? A second test asks whether it beats the S&amp;P 500.</li>
+    <li><b>Models</b>: logistic regression and gradient-boosted trees, trained on all 8 stocks together.</li>
+    <li><b>Walk-forward test</b>: for each year from ${M.first_test_year}, train on all earlier years (with a gap so targets don't overlap), then predict that year. The model never sees its test data.</li>
+    <li><b>Backtest</b>: hold the stock when P(up) &gt; 50%, else cash; ${M.cost_bps} bps cost per switch.</li>
+    <li><b>Claude forecaster</b>: Claude Opus 5.5 reads the same features as a text briefing and returns P(up) as structured JSON. Tested only after its Jun 2026 training cutoff, every 5th trading day, in an anonymous and a named version.</li>
+    <li><b>Leak test</b>: <code>tests/test_no_lookahead.py</code> rebuilds every feature from data cut off at three past dates and checks that nothing on or before the cutoff changes, which proves no feature uses future data.</li>
+    <li><b>Limits</b>: 8 large US stocks only; overlapping 5-day targets mean the effective sample is smaller than the row count; news history is too short to test; survivorship bias (these are today's winners).</li>
+  </ul>
+  <p class="muted">Rebuild with fresh data: <code>cd src &amp;&amp; ../.venv/bin/python build.py --refresh</code></p>`;
+}
+
+function renderLLM() {
+  const L = D.llm_forecast;
+  const design = [
+    ["Model", "Claude Opus 5.5 (claude-opus-5-5)"],
+    ["Training cutoff", "Jun 2026"],
+    ["Test window", L ? `${L.test_start} → ${L.test_end}` : "2026-07-01 → latest labeled day"],
+    ["Sampling", "every 5th trading day × 8 stocks (non-overlapping)"],
+    ["Arm A: anonymous", "numbers only, company and date hidden"],
+    ["Arm B: named", "same numbers + company name and date"],
+    ["Arm C: no hint", "like A, but the prompt gives no base rate and no advice to stay near it"],
+    ["Compared with", "ML boosting, ML logistic, always guess up"],
+  ];
+  $("#tLlmDesign").innerHTML = design.map(([k, v]) => `<tr><td style="font-family:var(--f-body)">${k}</td><td style="white-space:normal;text-align:left">${esc(v)}</td></tr>`).join("");
+  const box = $("#llmResults");
+  if (!L || !L.table || !Object.keys(L.table).length) {
+    box.innerHTML = `<h3>Results</h3><span class="pill flat">Not run yet</span>
+      <p class="muted">The experiment is ready but needs an Anthropic API key. A dry run found 152 test rows per arm (about half a cent per forecast).</p>
+      <p class="muted"><code>export ANTHROPIC_API_KEY=sk-ant-...</code><br><code>cd src &amp;&amp; ../.venv/bin/python llm_forecast.py</code></p>
+      <p class="muted">With about 150 samples per arm, accuracy has a margin of error of roughly ±8 points, so only a large gap would count as real evidence.</p>`;
+    $("#llmExamples").hidden = true; return;
+  }
+  const names = { claude_anon: "Claude, anonymous", claude_named: "Claude, named", claude_nohint: "Claude, no hint", ml_boosting: "ML boosting", ml_logistic: "ML logistic", always_up: "Always up" };
+  const ci = a => a && a[0] != null ? `<span class="muted">${a[0].toFixed(2)}–${a[1].toFixed(2)}</span>` : "";
+  const best = Math.min(...Object.values(L.table).map(v => v.brier));
+  box.innerHTML = `<h3>Results <span class="muted num">(${L.n_dates} dates, up share ${pct(L.up_share)})</span></h3>
+    <div class="tbl"><table><tr><th>Forecaster</th><th>Accuracy</th><th>AUC</th><th>Brier ↓</th><th>n</th></tr>` +
+    Object.entries(L.table).map(([k, v]) => `<tr><td style="font-family:var(--f-body)">${names[k] || k}</td>
+      <td>${pct(v.acc)}<br>${ci(v.acc_ci)}</td><td>${v.auc == null ? "–" : v.auc.toFixed(3)}<br>${ci(v.auc_ci)}</td>
+      <td class="${v.brier === best ? "win" : ""}">${v.brier.toFixed(4)}<br>${ci(v.brier_ci)}</td><td>${v.n}</td></tr>`).join("") +
+    `</table></div><p class="muted">Ranges are 95% bootstrap intervals; overlapping ranges mean no proven difference. Brier score measures probability error (lower is better; always saying 50% scores 0.25). Correlation between Claude (anonymous) and the ML model: ${L.corr_claude_ml ?? "–"}.</p>` +
+    (L.spread && L.spread.anon ? `<div class="verdict"><div><b>What this shows</b>
+    <p>Claude kept every forecast between ${pct(L.spread.anon.min, 0)} and ${pct(L.spread.anon.max, 0)} and called "up" ${pct(L.spread.anon.share_up, 0)} of the time. In effect it repeated the base rate it was given, so its accuracy matches "always guess up" and its ranking skill (AUC) is at chance level. Adding the company name and date did not help. Claude behaved like a careful analyst who sees no real signal, the same conclusion the ML models reached the hard way.</p>
+    ${L.spread.nohint ? (() => { const N = L.spread.nohint, T = L.table.claude_nohint, A = L.table.claude_anon;
+        const bolder = (N.max - N.min) > (L.spread.anon.max - L.spread.anon.min) + 0.02;
+        return `<p><b>Without the base-rate hint</b>, Claude's forecasts ranged from ${pct(N.min, 0)} to ${pct(N.max, 0)} and it called "up" ${pct(N.share_up, 0)} of the time${bolder ? ", so it did get bolder" : ", about as cautious as before"}. Accuracy ${pct(T.acc)}, AUC ${T.auc.toFixed(3)}, Brier ${T.brier.toFixed(4)} (with the hint: ${pct(A.acc)}, ${A.auc.toFixed(3)}, ${A.brier.toFixed(4)}). ${T.brier > A.brier ? "Its probabilities were slightly worse without the hint." : "Its probabilities were no worse without the hint."} So the caution comes from Claude's own judgment, not from the prompt.</p>`; })() : ""}
+    <p class="muted">Caveat: arms A and B told Claude that about 56% of weeks are up and to stay close to that unless the data gave a reason. Also, all 8 stocks on the same date share the market's move, so the 152 samples behave more like 19 independent dates and the true uncertainty is wider than the ranges shown.</p></div></div>` : "");
+  const ex = $("#llmExamples"); ex.hidden = false;
+  ex.innerHTML = `<h3>What Claude said</h3><div class="news">` + L.examples.map(e => {
+    const hit = e.actual == null ? "" : ((e.prob > 0.5) === (e.actual > 0) ? `<span class="pill rel">right</span>` : `<span class="pill">wrong</span>`);
+    return `<div><span class="sc">${pct(e.prob, 0)}</span><span class="sc">${e.actual == null ? "–" : pct(e.actual)}</span><span><b>${e.arm === "named" ? esc(e.ticker) + " · " + esc(e.date) : "anonymous"}</b> ${hit}<br><span class="src">${esc(e.rationale)}</span></span></div>`; }).join("") +
+    `</div><p class="muted">Left: Claude's P(up). Middle: the actual 5-day return.</p>`;
+}
+
+function renderVol() {
+  const V = D.volatility; if (!V) return;
+  const o = V.overall;
+  $("#volTiles").innerHTML = [
+    ["Boosting forecast R²", o.gbm.r2.toFixed(2), `correlation ${o.gbm.corr.toFixed(2)}`],
+    ["Linear forecast R²", o.linear.r2.toFixed(2), `correlation ${o.linear.corr.toFixed(2)}`],
+    ["Naive (last 20 days) R²", o.naive.r2.toFixed(2), `correlation ${o.naive.corr.toFixed(2)}`],
+    ["Direction model, for contrast", D.model.overall.gbm.auc.toFixed(3), "AUC; 0.5 = coin flip"],
+  ].map(([l, b, v]) => `<div class="tile"><div class="label">${l}</div><div class="big">${b}</div><div class="vs">${v}</div></div>`).join("");
+  const S = V.series[cur], vo = base();
+  vo.scales.y.ticks = { callback: v => Math.round(v * 100) + "%" };
+  vo.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${pct(c.raw, 0)}` };
+  $("#volTitle").textContent = `${cur}: predicted vs realized volatility`;
+  mk("cVol", { type: "line", data: { labels: S.dates, datasets: [line("Realized", S.realized, css("--s1")), line("Boosting", S.gbm, css("--s2")), line("Naive", S.naive, css("--s3"))] }, options: vo });
+  const Z = V.sizing; if (!Z) return;
+  const P = Z.per_ticker[cur], so = base();
+  so.scales.y.ticks = { callback: v => v + "×" };
+  so.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${c.raw.toFixed(2)}×` };
+  $("#sizeTitle").textContent = `${cur}: hold less when a storm is forecast`;
+  mk("cSize", { type: "line", data: { labels: P.dates, datasets: [line("Sized by forecast", P.model, css("--s1")), line("Buy and hold", P.bh, css("--s2")), line("Sized by last 20 days", P.naive, css("--s3"))] }, options: so });
+  const Sm = Z.summary, rowS = (l, k, f, hi = true) => { const vals = ["model", "bh", "naive"].map(x => Sm[x][k]); const best = hi ? Math.max(...vals) : Math.max(...vals);
+    return `<tr><td>${l}</td>${vals.map(v => `<td class="${v === best ? "win" : ""}">${f(v)}</td>`).join("")}</tr>`; };
+  $("#tSize").innerHTML = `<tr><th></th><th>Forecast</th><th>Hold</th><th>20-day</th></tr>`
+    + rowS("Annual return", "cagr", x => pct(x)) + rowS("Volatility", "vol", x => pct(x)).replace(/class="win"/g, "")
+    + rowS("Sharpe ratio", "sharpe", x => x.toFixed(2)) + rowS("Worst drop", "maxdd", x => pct(x));
+  $("#sizeNote").textContent = `Sizing by the forecast beat buy-and-hold on Sharpe ratio for ${Z.sharpe_wins} of 8 stocks and had a smaller worst drop for ${Z.dd_wins} of 8. It earns less in total because it holds less on average (${pct(P.avg_weight, 0)} for ${cur}). The simple 20-day rule does about as well, so the forecast's extra accuracy barely matters for this use.`;
+}
+
+// ---- local app mode: these controls appear only when served by app.py ----
+let APP = null, POLL = null, LIVE = {};
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+async function renderApp() {
+  if (APP === null) { try { APP = await api("api/status"); } catch (_) { APP = false; } }
+  if (!APP) return;
+  drawAppbar(); drawLive();
+}
+function drawAppbar() {
+  const J = APP.job, bar = $("#appbar"); bar.hidden = false;
+  const key = APP.has_key ? `<span class="pill rel">Claude connected</span>` : `<span class="pill">Claude off: add ANTHROPIC_API_KEY to .env and restart</span>`;
+  const status = J.running ? `${esc(J.name)} is running…` : J.finished ? `${esc(J.name)} ${J.ok ? "finished" : "failed"} at ${new Date(J.finished * 1000).toLocaleTimeString()}` : "Running locally on this computer.";
+  bar.innerHTML = `<div style="display:grid;gap:6px"><b>App mode</b><div>${key}</div><div class="muted">${status}</div></div>
+    <div class="actions"><button class="btn ghost" id="bRefresh" type="button" ${J.running ? "disabled" : ""}>Refresh data</button>
+    <button class="btn" id="bExp" type="button" ${J.running || !APP.has_key ? "disabled" : ""}>Run Claude experiment (~$2)</button></div>
+    ${J.log && J.log.length ? `<div class="log" id="jobLog">${esc(J.log.join("\n"))}</div>` : ""}`;
+  const lg = $("#jobLog"); if (lg) lg.scrollTop = lg.scrollHeight;
+  $("#bRefresh").onclick = () => startJob("api/refresh");
+  $("#bExp").onclick = () => startJob("api/experiment");
+}
+async function startJob(path) {
+  try { await api(path, {}); } catch (e) { $("#err").textContent = e.message; return; }
+  poll();
+}
+async function poll() {
+  clearTimeout(POLL);
+  try { APP = await api("api/status"); } catch (_) { return; }
+  drawAppbar();
+  if (APP.job.running) { POLL = setTimeout(poll, 2000); return; }
+  if (APP.job.ok) { D = await (await fetch("data.json", { cache: "no-store" })).json(); renderTiles(); renderStatic(); renderStock(); renderLLM(); }
+}
+function drawLive() {
+  const box = $("#live"); if (!box || !APP) return;
+  const res = LIVE[cur];
+  const out = !res ? "" : res.error ? `<div class="answer"><span style="color:var(--bad)">${esc(res.error)}</span></div>`
+    : res.busy ? `<div class="answer muted">Claude is reading today's numbers for ${cur}…</div>`
+    : `<div class="answer"><div><b class="num">${pct(res.prob)}</b> chance ${esc(res.ticker)} is up over the next 5 days <span class="muted">(Claude, data as of ${esc(res.date)})</span></div><div class="muted">${esc(res.rationale)}</div></div>`;
+  box.innerHTML = `<button class="btn ghost" id="bAsk" type="button" ${!APP.has_key || (res && res.busy) ? "disabled" : ""}>Ask Claude about ${cur} now</button>${out}
+    ${APP.has_key ? "" : `<p class="muted">Needs an Anthropic API key in the .env file.</p>`}`;
+  $("#bAsk").onclick = async () => {
+    const t = cur; LIVE[t] = { busy: true }; drawLive();
+    try { LIVE[t] = await api("api/forecast", { ticker: t }); } catch (e) { LIVE[t] = { error: e.message }; }
+    if (t === cur) drawLive();
+  };
+}
+
+function renderAll() { if (!D) return; renderTiles(); renderStatic(); renderPicker(); renderStock(); renderLLM(); renderApp(); }
+
+fetch("data.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(d => {
+  D = d; try { const s = localStorage.getItem("ssl-ticker"); if (s && D.tickers[s]) cur = s; } catch (_) {}
+  renderAll();
+}).catch(e => { $("#err").textContent = "Could not load data.json. Run the pipeline first, and open this page through a local server. (" + e.message + ")"; });
+
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+new MutationObserver(renderAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>
