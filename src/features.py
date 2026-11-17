@@ -70,8 +70,9 @@ def earnings_features(earn, index):
     return out.set_index("date")[["eps_surprise", "days_since_er"]]
 
 
-def build_panel(close, volume, macro, earnings):
-    """Return one long table: (date, ticker) rows, features + targets."""
+def build_panel(close, volume, macro, earnings=None):
+    """Return one long table: (date, ticker) rows, features + targets.
+    earnings may be None (or miss a ticker); those rows get NaN earnings features."""
     mf = macro_features(macro, close.index)
     frames = []
     for t in close.columns:
@@ -90,7 +91,11 @@ def build_panel(close, volume, macro, earnings):
         f["volume_z"] = (lv - lv.rolling(20).mean()) / lv.rolling(20).std()
         f = f.join(mf)
         f["rel_str_20"] = f["ret_20"] - f["spx_ret_20"]
-        f = f.join(earnings_features(earnings[t], c.index))
+        if earnings is not None and t in earnings and len(earnings[t]):
+            f = f.join(earnings_features(earnings[t], c.index))
+        else:  # market-wide universe: no per-stock earnings history
+            f["eps_surprise"] = np.nan
+            f["days_since_er"] = np.nan
         # targets (used only for training and scoring, never as features)
         f["fwd_ret_1"] = c.shift(-1) / c - 1
         f["fwd_ret_h"] = c.shift(-HORIZON) / c - 1

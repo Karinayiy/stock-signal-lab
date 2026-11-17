@@ -4,7 +4,7 @@ Can technical indicators, macro data, earnings surprises, news sentiment, or a l
 
 ## Website
 
-The dashboard is a static site in `web/`. It opens with a **risk planner**: pick a stock, an amount and the volatility you accept, and it sizes the position from next week's volatility forecast and shows the likely price range. Everything runs in the browser.
+The dashboard is a static site in `web/`. It opens with a **risk planner** and a **market scan** of every S&P 500 stock (search, filter by sector, sort by forecast volatility or by how stormy a stock is versus its own history): pick a stock, an amount and the volatility you accept, and it sizes the position from next week's volatility forecast and shows the likely price range. Everything runs in the browser.
 
 `.github/workflows/site.yml` rebuilds the study after every US trading day (22:30 UTC, Monday to Friday), saves the growing news archive back to the repo, and publishes `web/` to GitHub Pages. It needs no API key. To turn it on: repo **Settings → Pages → Source: GitHub Actions**, then **Actions → Update website → Run workflow**. (GitHub Pages on a free account needs a public repo; `.env` is never committed.)
 
@@ -55,6 +55,7 @@ cd src && ../.venv/bin/python build.py --refresh   # download, analyse, train, w
 | `src/features.py` | 18 features, all known at that day's close (no look-ahead) |
 | `src/build.py` | Correlations, IC, walk-forward direction models, backtest, volatility study, JSON export |
 | `src/sentiment.py` | News sentiment: Claude scorer with VADER fallback, daily headline archive |
+| `src/universe.py` | One volatility model for all ~500 S&P 500 stocks; writes `web/universe.json`; forecasts any symbol on demand |
 | `src/portfolio.py` | Live quotes and portfolio risk analysis for the local app |
 | `src/llm_forecast.py` | Claude-as-forecaster experiment vs the ML models (3 groups, cost tracking) |
 | `tests/test_no_lookahead.py` | Proves no feature uses future data |
@@ -69,6 +70,7 @@ cd src && ../.venv/bin/python build.py --refresh   # download, analyse, train, w
 - **No data leak.** Training on shuffled labels gives AUC 0.48, as it should.
 - **Volatility is predictable.** The same features predict next week's volatility with out-of-sample R² 0.41 (boosting) vs 0.23 for the naive "last 20 days" guess.
 - **Claude doesn't beat the base rate either.** On 152 post-cutoff samples (Jul–Nov 2026), Claude kept every forecast between 50% and 58% and called "up" 99% of the time, matching "always guess up" (accuracy 56.6% vs 55.9%, AUC 0.50 anonymous, 0.42 named). A third run with no base-rate hint (cost $0.76) stayed just as cautious (48%–57%) and was slightly worse (accuracy 53.3%, AUC 0.46), so the caution is Claude's own judgment, not the prompt.
+- **It scales to the whole market.** One pooled model over all ~500 S&P 500 stocks (price and macro features, no earnings data) predicts next week's volatility with out-of-sample R² 0.28 vs 0.15 for "last 20 days" (193,000 stock-weeks, 2019–2026). Fitting on log volatility made raw forecasts about 20% too low on average, so they are rescaled (Duan's smearing); after that, realized volatility averages 1.06× the forecast.
 - **Volatility forecasts are useful for sizing.** Holding less when high volatility is forecast cut average volatility from 35% to 27% and the worst drop from −53% to −43%, and raised the Sharpe ratio for 7 of 8 stocks, at the cost of a lower total return (23% vs 28% a year). The simple "last 20 days" rule does about as well.
 - **Leak test passes.** `tests/test_no_lookahead.py` rebuilds all features from data cut off at three past dates; nothing on or before the cutoff changes.
 - **Claude reads news better than a word list.** Only 10 of 50 headlines in Yahoo's AAPL feed are actually about Apple; Claude flags the rest as irrelevant, and for MSFT, TSLA and JPM it disagrees with VADER on whether the news is positive or negative.
@@ -86,7 +88,7 @@ cd src && ../.venv/bin/python build.py --refresh   # download, analyse, train, w
 ## Ideas to extend
 
 1. Once the news archive (grown daily by the workflow) covers a few months, test Claude news sentiment as a feature.
-2. Add more stocks (for example all of the S&P 500) to reduce survivorship bias.
+2. Use past S&P 500 membership (not today's list) for the market-wide model, to remove survivorship bias.
 3. Try longer horizons (1–3 months), where valuation and earnings may matter more.
 4. Combine Claude's news relevance filter with the daily archive to test whether only-relevant news sentiment predicts anything.
 

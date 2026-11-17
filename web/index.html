@@ -171,6 +171,8 @@ html { scroll-padding-top: 64px; }
 #today tbody tr { cursor: pointer; } #today tbody tr:hover td { background: var(--grid); }
 #today tr[aria-selected="true"] td { background: var(--accent-soft); }
 .regime { font: 500 12px var(--f-mono); }
+@media (max-width: 640px) { #today th:nth-child(2), #today td:nth-child(2), #today th:nth-child(6), #today td:nth-child(6) { display: none; }
+  #today td:first-child .muted { display: block; font-size: 11px; } }
 
 /* portfolio */
 textarea { font: 13px/1.5 var(--f-mono); padding: 10px; border-radius: 8px; border: 1px solid var(--line);
@@ -203,12 +205,16 @@ input[type=file] { font-size: 13px; color: var(--ink-2); max-width: 100%; }
   <!-- 0. Today: risk planner (the app) -->
   <section id="planner">
     <div class="sec-head"><div class="eyebrow">0 · Today</div><h2>Risk planner</h2>
-      <p class="muted">Direction can't be predicted, but how much a stock will move can. Pick a stock, an amount and how bumpy a ride you accept, and this sizes the position from next week's volatility forecast.</p></div>
+      <p class="muted">Direction can't be predicted, but how much a stock will move can. Pick a stock, an amount and how bumpy a ride you accept, and this sizes the position from next week's volatility forecast.</p>
+      <p class="muted" id="uniMeta"></p></div>
     <div style="display:grid;gap:16px">
       <div class="panel">
         <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:24px">
           <div class="form">
-            <label>Stock <select id="pStock"></select></label>
+            <label>Stock (any S&amp;P 500 company; any symbol in the local app)
+              <input id="pStock" list="pList" autocomplete="off" spellcheck="false" placeholder="e.g. AAPL, KO, Netflix" style="font:15px var(--f-mono);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);width:100%;text-transform:uppercase"></label>
+            <datalist id="pList"></datalist>
+            <div id="pMsg" class="muted"></div>
             <label>Amount you'd put in this stock ($) <input id="pAmt" type="number" min="0" step="100" value="10000" inputmode="decimal"></label>
             <label><span class="row"><span>Volatility you accept (per year)</span><b class="num" id="pTgtV">20%</b></span>
               <input id="pTgt" type="range" min="5" max="60" step="1" value="20" aria-describedby="pTgtV"></label>
@@ -218,9 +224,18 @@ input[type=file] { font-size: 13px; color: var(--ink-2); max-width: 100%; }
         </div>
       </div>
       <div class="panel">
-        <h3>All stocks today</h3>
+        <h3>Market scan: S&amp;P 500</h3>
+        <div class="bar">
+          <input id="sQ" type="search" placeholder="Search ticker or company" aria-label="Search ticker or company" style="font:14px var(--f-body);padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);flex:1 1 200px;min-width:0">
+          <select id="sSector" aria-label="Sector" style="font:14px var(--f-body);padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);max-width:100%"><option value="">All sectors</option></select>
+          <select id="sSort" aria-label="Sort" style="font:14px var(--f-body);padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);max-width:100%">
+            <option value="pred">Highest forecast volatility</option><option value="-pred">Lowest forecast volatility</option>
+            <option value="rank">Stormiest vs own history</option><option value="-rank">Calmest vs own history</option>
+            <option value="move">Biggest move today</option><option value="t">A to Z</option></select>
+        </div>
         <div class="tbl"><table id="today"></table></div>
-        <p class="muted">Regime ranks today's forecast against the stock's own past forecasts: Calm is the lowest quarter, Elevated the top quarter, Stormy the top tenth. Up chance is the direction model, shown for honesty: it has no proven edge.</p>
+        <div class="bar"><span class="muted" id="sCount"></span><button class="btn ghost" id="sMore" type="button">Show more</button></div>
+        <p class="muted">Regime ranks today's forecast against the stock's own past forecasts: Calm is the lowest quarter, Elevated the top quarter, Stormy the top tenth. Click a row to load it into the planner.</p>
       </div>
     </div>
   </section>
@@ -439,7 +454,7 @@ function renderTiles() {
 function renderPicker() {
   $("#picker").innerHTML = D.meta.tickers.map(t => `<button type="button" id="pk-${t}" aria-pressed="${t === cur}" data-t="${t}">${t}</button>`).join("");
   $("#picker").onclick = e => { const t = e.target.dataset?.t; if (!t) return; cur = t;
-    try { localStorage.setItem("ssl-ticker", t); } catch (_) {} renderPicker(); renderStock(); renderPlanner(); };
+    try { localStorage.setItem("ssl-ticker", t); } catch (_) {} renderPicker(); renderStock(); choose(t); };
 }
 
 function renderStock() {
@@ -694,52 +709,97 @@ function drawLive() {
 }
 
 
-// ---- Today: risk planner, runs entirely in the browser ----
-function pctRank(arr, v) { const a = arr.filter(x => x != null); return a.length ? a.filter(x => x <= v).length / a.length : null; }
-function regime(t) { const L = D.volatility.latest[t], r = pctRank(D.volatility.series[t].gbm, L.pred);
-  return { r, label: r == null ? "–" : r < 0.25 ? "Calm" : r < 0.75 ? "Normal" : r < 0.9 ? "Elevated" : "Stormy" }; }
+// ---- Today: risk planner + market scan, run entirely in the browser ----
+let U = null, UMAP = {}, ANY = {}, pcur = "AAPL", SHOW = 20;
 const money = x => "$" + Math.round(x).toLocaleString("en-US");
-function renderPlanner() {
-  if (!D.volatility?.latest) return;
-  const sel = $("#pStock");
-  if (!sel.options.length) {
-    sel.innerHTML = D.meta.tickers.map(t => `<option>${t}</option>`).join("");
-    try { const v = JSON.parse(localStorage.getItem("ssl-plan") || "{}"); if (v.amt) $("#pAmt").value = v.amt; if (v.tgt) $("#pTgt").value = v.tgt; } catch (_) {}
-    sel.onchange = () => { cur = sel.value; try { localStorage.setItem("ssl-ticker", cur); } catch (_) {} renderPicker(); renderStock(); renderPlanner(); };
-    $("#pAmt").oninput = $("#pTgt").oninput = () => { try { localStorage.setItem("ssl-plan", JSON.stringify({ amt: $("#pAmt").value, tgt: $("#pTgt").value })); } catch (_) {} renderPlanner(); };
+const regimeOf = r => r == null ? "–" : r < 0.25 ? "Calm" : r < 0.75 ? "Normal" : r < 0.9 ? "Elevated" : "Stormy";
+function fc(t) { return UMAP[t] || ANY[t]?.row || null; }
+function liveOr(t, row) { const q = livePrice(t); return q ? { price: q.price, prev: q.prev, live: true } : { price: row.close, prev: row.prev, live: false }; }
+async function choose(t) {
+  t = String(t || "").trim().toUpperCase().replace(/\.([A-C])$/, "-$1");
+  if (!t) return;
+  if (!UMAP[t]) {   // maybe a company name was typed
+    const hit = U?.rows.find(x => x.name.toUpperCase() === t || x.name.toUpperCase().startsWith(t + " "));
+    if (hit) t = hit.t;
   }
-  sel.value = cur;
-  const L = D.volatility.latest[cur], T = D.tickers[cur], lq = livePrice(cur), price = lq ? lq.price : T.close[T.close.length - 1];
+  pcur = t; $("#pStock").value = t;
+  try { localStorage.setItem("ssl-pcur", t); } catch (_) {}
+  if (D.tickers[t] && cur !== t) { cur = t; renderPicker(); renderStock(); }
+  if (!UMAP[t] && !ANY[t]) {
+    if (!APP) { ANY[t] = { err: `${t} isn't in the S&P 500 list. Run the local app to forecast any symbol.` }; }
+    else {
+      ANY[t] = { busy: true }; renderPlanner();
+      try { ANY[t] = { row: await api("api/volforecast?t=" + encodeURIComponent(t)) }; } catch (e) { ANY[t] = { err: e.message }; }
+    }
+  }
+  renderPlanner(); pollQuotes();
+}
+function renderPlanner() {
+  if (!U) return;
+  const inp = $("#pStock");
+  if (!$("#pList").options.length) {
+    $("#pList").innerHTML = U.rows.map(x => `<option value="${x.t}">${esc(x.name)}</option>`).join("");
+    $("#sSector").innerHTML += U.meta.sectors.map(x => `<option>${esc(x)}</option>`).join("");
+    try { const v = JSON.parse(localStorage.getItem("ssl-plan") || "{}"); if (v.amt) $("#pAmt").value = v.amt; if (v.tgt) $("#pTgt").value = v.tgt;
+      const pc = localStorage.getItem("ssl-pcur"); if (pc) pcur = pc; } catch (_) {}
+    inp.value = pcur;
+    inp.onchange = () => choose(inp.value);
+    inp.onkeydown = e => { if (e.key === "Enter") choose(inp.value); };
+    $("#pAmt").oninput = $("#pTgt").oninput = () => { try { localStorage.setItem("ssl-plan", JSON.stringify({ amt: $("#pAmt").value, tgt: $("#pTgt").value })); } catch (_) {} renderPlanner(); };
+    $("#sQ").oninput = $("#sSector").onchange = $("#sSort").onchange = () => { SHOW = 20; renderScan(); pollQuotes(); };
+    $("#sMore").onclick = () => { SHOW += 40; renderScan(); pollQuotes(); };
+    const o = U.meta.overall;
+    $("#uniMeta").textContent = `Forecasts for ${U.rows.length} S&P 500 stocks from one market-wide model (data ${U.rows[0]?.date}). Tested on ${o.n.toLocaleString("en-US")} out-of-sample weeks since ${U.meta.first_test_year}: R² ${o.gbm.toFixed(2)} vs ${o.naive.toFixed(2)} for "last 20 days".`;
+  }
   const amt = Math.max(0, +$("#pAmt").value || 0), tgt = +$("#pTgt").value / 100;
   $("#pTgtV").textContent = Math.round(tgt * 100) + "%";
-  const w = Math.min(1, tgt / L.pred), wk = L.pred * Math.sqrt(5 / 252), g = regime(cur);
+  const st = ANY[pcur], L = fc(pcur);
+  $("#pMsg").innerHTML = st?.busy ? `Forecasting ${esc(pcur)}…` : st?.err ? `<span style="color:var(--warn)">${esc(st.err)}</span>` : L ? `${esc(L.name)}${L.sector ? " · " + esc(L.sector) : ""}${L.note ? `<br>${esc(L.note)}` : ""}` : "";
+  if (!L) { $("#pOut").innerHTML = `<p class="muted">Pick a stock to see the plan.</p>`; renderScan(); return; }
+  const P = liveOr(pcur, L), price = P.price;
+  const w = Math.min(1, tgt / L.pred), wk = L.pred * Math.sqrt(5 / 252);
   const lo68 = price * Math.exp(-wk), hi68 = price * Math.exp(wk), lo95 = price * Math.exp(-2 * wk), hi95 = price * Math.exp(2 * wk);
   const sc = x => ((x - lo95 * 0.98) / (hi95 * 1.02 - lo95 * 0.98) * 100).toFixed(1) + "%";
+  const f2 = x => x >= 100 ? x.toFixed(0) : x.toFixed(2);
   $("#pOut").innerHTML = `
-    <div class="result"><div class="muted">Suggested position in ${cur}</div><div class="big">${money(amt * w)}</div>
+    <div class="result"><div class="muted">Suggested position in ${esc(pcur)}</div><div class="big">${money(amt * w)}</div>
       <div class="muted">${pct(w, 0)} of ${money(amt)}${w >= 1 ? " (capped at 100%, no borrowing)" : `; keep ${money(amt * (1 - w))} in cash`}</div></div>
     <div class="facts">
       <div>Forecast volatility, next week<b>${pct(L.pred, 0)}</b></div>
       <div>Last 20 days<b>${pct(L.vol_20, 0)}</b></div>
-      <div>Regime<b>${g.label}</b></div>
+      <div>Regime<b>${regimeOf(L.rank)}</b></div>
       <div>Typical 5-day move<b>±${pct(wk, 1)}</b></div>
     </div>
     <div style="display:grid;gap:4px">
-      <div class="muted">Likely price range by next week (${lq ? `<span class="liveDot"></span>live $${price.toFixed(2)}, ${new Date(LIVEQ._time * 1000).toLocaleTimeString()}` : `last close $${price.toFixed(2)}, ${esc(L.date)}`})</div>
-      <div class="range" role="img" aria-label="2 in 3 chance between $${lo68.toFixed(0)} and $${hi68.toFixed(0)}; 19 in 20 between $${lo95.toFixed(0)} and $${hi95.toFixed(0)}">
+      <div class="muted">Likely price range by next week (${P.live ? `<span class="liveDot"></span>live $${price.toFixed(2)}, ${new Date(LIVEQ._time * 1000).toLocaleTimeString()}` : `last close $${price.toFixed(2)}, ${esc(L.date)}`})</div>
+      <div class="range" role="img" aria-label="2 in 3 chance between $${f2(lo68)} and $${f2(hi68)}; 19 in 20 between $${f2(lo95)} and $${f2(hi95)}">
         <i class="r95" style="left:${sc(lo95)};width:calc(${sc(hi95)} - ${sc(lo95)})"></i>
         <i class="r68" style="left:${sc(lo68)};width:calc(${sc(hi68)} - ${sc(lo68)})"></i>
         <span class="now" style="left:${sc(price)}"></span></div>
       <div class="muted num" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px">
-        <span>2 in 3: $${lo68.toFixed(0)}–$${hi68.toFixed(0)}</span><span>19 in 20: $${lo95.toFixed(0)}–$${hi95.toFixed(0)}</span></div>
+        <span>2 in 3: $${f2(lo68)}–$${f2(hi68)}</span><span>19 in 20: $${f2(lo95)}–$${f2(hi95)}</span></div>
     </div>
     <p class="muted">Position = amount × min(1, accepted ÷ forecast). Ranges assume no drift, since direction isn't predictable. Not investment advice.</p>`;
-  const S = D.sentiment || {};
-  $("#today").innerHTML = `<thead><tr><th>Stock</th><th>${Object.keys(LIVEQ).length ? "Live price" : "Close"}</th><th>Today</th><th>Vol forecast</th><th>Regime</th><th>Size at ${Math.round(tgt * 100)}%</th><th>Up chance</th><th>News</th></tr></thead><tbody>` +
-    D.meta.tickers.map(t => { const l = D.volatility.latest[t], c = D.tickers[t].close, r = regime(t), n = S[t]?.llm_avg ?? S[t]?.avg;
-      return `<tr data-t="${t}" aria-selected="${t === cur}"><td><b>${t}</b></td><td>$${(livePrice(t)?.price ?? c[c.length - 1]).toFixed(2)}</td><td class="${sgn(livePrice(t) ? livePrice(t).price / livePrice(t).prev - 1 : c[c.length - 1] / c[c.length - 2] - 1)}">${pct(livePrice(t) ? livePrice(t).price / livePrice(t).prev - 1 : c[c.length - 1] / c[c.length - 2] - 1, 2)}</td><td>${pct(l.pred, 0)}</td>
-        <td class="regime">${r.label}</td><td>${pct(Math.min(1, tgt / l.pred), 0)}</td><td class="lose">${pct(D.tickers[t].latest.prob, 0)}</td><td>${n == null ? "–" : f3(n).slice(0, -1)}</td></tr>`; }).join("") + "</tbody>";
-  $("#today").onclick = e => { const t = e.target.closest("tr")?.dataset?.t; if (!t) return; sel.value = t; sel.onchange(); };
+  renderScan();
+}
+function scanRows() {
+  const q = ($("#sQ").value || "").trim().toUpperCase(), sec = $("#sSector").value, key = $("#sSort").value;
+  let rows = U.rows.filter(x => (!sec || x.sector === sec) && (!q || x.t.includes(q) || x.name.toUpperCase().includes(q)));
+  const move = x => { const p = liveOr(x.t, x); return Math.abs(p.price / p.prev - 1); };
+  const by = { pred: x => -x.pred, "-pred": x => x.pred, rank: x => -(x.rank ?? 0), "-rank": x => x.rank ?? 1, move: x => -move(x) }[key];
+  rows = by ? rows.sort((a, b) => by(a) - by(b)) : rows.sort((a, b) => a.t.localeCompare(b.t));
+  return rows;
+}
+function renderScan() {
+  const all = scanRows(), rows = all.slice(0, SHOW), tgt = +$("#pTgt").value / 100;
+  $("#sCount").textContent = `${rows.length} of ${all.length} shown`;
+  $("#sMore").hidden = rows.length >= all.length;
+  $("#today").innerHTML = `<thead><tr><th>Stock</th><th>Sector</th><th>${Object.keys(LIVEQ).length ? "Price (live)" : "Close"}</th><th>Today</th><th>Vol forecast</th><th>Last 20 days</th><th>Regime</th><th>Size at ${Math.round(tgt * 100)}%</th></tr></thead><tbody>` +
+    rows.map(x => { const p = liveOr(x.t, x), d = p.price / p.prev - 1;
+      return `<tr data-t="${x.t}" aria-selected="${x.t === pcur}"><td><b>${x.t}</b> <span class="muted">${esc(x.name.length > 22 ? x.name.slice(0, 21) + "…" : x.name)}</span></td>
+        <td class="muted" style="font-family:var(--f-body)">${esc(x.sector)}</td><td>$${p.price.toFixed(2)}</td><td class="${sgn(d)}">${pct(d, 2)}</td>
+        <td>${pct(x.pred, 0)}</td><td>${pct(x.vol_20, 0)}</td><td class="regime">${regimeOf(x.rank)}</td><td>${pct(Math.min(1, tgt / x.pred), 0)}</td></tr>`; }).join("") + "</tbody>";
+  $("#today").onclick = e => { const t = e.target.closest("tr")?.dataset?.t; if (t) { choose(t); $("#planner").scrollIntoView({ behavior: "smooth" }); } };
 }
 
 // ---- live quotes + portfolio (local app only) ----
@@ -749,8 +809,10 @@ const sgn = x => x == null ? "" : x >= 0 ? "up" : "down";
 function livePrice(t) { const q = LIVEQ[t]; return q && q.price ? q : null; }
 async function pollQuotes() {
   clearTimeout(LIVET);
+  if (!APP) return;
   if (document.visibilityState === "visible") {
-    try { const j = await api("api/quotes?t=" + D.meta.tickers.join(",")); LIVEQ = j.quotes || {}; LIVEQ._time = j.time; renderPlanner(); } catch (_) {}
+    const want = [...new Set([pcur, ...(U ? scanRows().slice(0, SHOW).map(x => x.t) : [])])].slice(0, 60);
+    try { const j = await api("api/quotes?t=" + want.join(",")); LIVEQ = { ...LIVEQ, ...(j.quotes || {}) }; LIVEQ._time = j.time; renderPlanner(); } catch (_) {}
   }
   LIVET = setTimeout(pollQuotes, 60000);
 }
@@ -852,8 +914,11 @@ function drawPortfolio() {
 
 function renderAll() { if (!D) return; renderPlanner(); renderTiles(); renderStatic(); renderPicker(); renderStock(); renderLLM(); renderApp(); }
 
-fetch("data.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(d => {
-  D = d; try { const s = localStorage.getItem("ssl-ticker"); if (s && D.tickers[s]) cur = s; } catch (_) {}
+Promise.all([fetch("data.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+  fetch("universe.json").then(r => r.ok ? r.json() : null).catch(() => null)]).then(([d, u]) => {
+  D = d; U = u; UMAP = Object.fromEntries((u?.rows || []).map(x => [x.t, x]));
+  try { const s = localStorage.getItem("ssl-ticker"); if (s && D.tickers[s]) cur = s; } catch (_) {}
+  if (!U) $("#planner").hidden = true;
   renderAll();
 }).catch(e => { $("#err").textContent = "Could not load data.json. Run the pipeline first, and open this page through a local server. (" + e.message + ")"; });
 

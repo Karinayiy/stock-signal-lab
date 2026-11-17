@@ -88,13 +88,33 @@ def live_forecast(ticker):
             "rationale": why, "model": model}
 
 
-def vol_forecasts():
-    """Latest volatility forecasts from the study, for the tickers it covers."""
+def universe_rows():
+    """Market-wide forecasts written by universe.py, keyed by ticker."""
     try:
-        d = json.loads((WEB / "data.json").read_text())
-        return {t: v["pred"] for t, v in d["volatility"]["latest"].items()}
+        return {x["t"]: x for x in json.loads((WEB / "universe.json").read_text())["rows"]}
     except (OSError, KeyError, ValueError):
         return {}
+
+
+def vol_forecast(t, rows=None):
+    """Forecast row for any ticker: the S&P 500 table if it's there, else computed now."""
+    rows = universe_rows() if rows is None else rows
+    if t in rows:
+        return rows[t]
+    import universe
+    return universe.forecast_one(t) if universe.MODEL_PATH.exists() else None
+
+
+def vol_forecasts(tickers):
+    rows, out = universe_rows(), {}
+    for t in [t for t in tickers if t != portfolio.CASH][:20]:
+        try:
+            f = vol_forecast(t, rows)
+        except Exception:
+            f = None
+        if f:
+            out[t] = f["pred"]
+    return out
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -127,6 +147,15 @@ class Handler(SimpleHTTPRequestHandler):
             raw = parse_qs(urlparse(self.path).query).get("t", [""])[0].split(",")
             ts = [t for t in (portfolio.clean_ticker(x) for x in raw) if t][:60]
             return self.send_json({"time": time.time(), "quotes": portfolio.quotes(ts)})
+        if self.path.startswith("/api/volforecast"):
+            t = portfolio.clean_ticker(parse_qs(urlparse(self.path).query).get("t", [""])[0])
+            if not t:
+                return self.send_json({"error": "Unknown symbol."}, 400)
+            try:
+                f = vol_forecast(t)
+            except Exception as e:
+                return self.send_json({"error": f"{type(e).__name__}: {e}"}, 502)
+            return self.send_json(f) if f else self.send_json({"error": f"No usable price history for {t} (needs about a year)."}, 404)
         return super().do_GET()
 
     def do_POST(self):
@@ -137,7 +166,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"error": "Request body must be JSON."}, 400)
 
         if self.path == "/api/refresh":
-            ok = start_job("Refresh data", ["build.py", "--refresh"])
+            ok = start_job("Refresh data", ["-c", "import runpy, sys; sys.argv = ['build.py', '--refresh']; runpy.run_path('build.py', run_name='__main__'); sys.argv = ['universe.py', '--refresh']; runpy.run_path('universe.py', run_name='__main__')"])
             return self.send_json({"started": ok} if ok else {"error": "Another job is still running."}, 200 if ok else 409)
 
         if self.path == "/api/experiment":
@@ -162,7 +191,8 @@ class Handler(SimpleHTTPRequestHandler):
             if not isinstance(h, list) or not h:
                 return self.send_json({"error": "Send a list of holdings."}, 400)
             try:
-                return self.send_json(portfolio.analyse(h, vol_forecasts()))
+                ts = [portfolio.clean_ticker(x.get("ticker")) for x in h if isinstance(x, dict)]
+                return self.send_json(portfolio.analyse(h, vol_forecasts([t for t in ts if t])))
             except Exception as e:  # network or data problems
                 return self.send_json({"error": f"{type(e).__name__}: {e}"}, 502)
 
@@ -173,6 +203,9 @@ def main():
     if not (WEB / "data.json").exists():
         print("No data yet; running the pipeline once (about a minute)...")
         subprocess.run([sys.executable, "build.py"], cwd=SRC, check=True)
+    if not (WEB / "universe.json").exists() or not (ROOT / "data" / "universe_model.joblib").exists():
+        print("Building the S&P 500 volatility forecasts (about a minute)...")
+        subprocess.run([sys.executable, "universe.py"], cwd=SRC, check=True)
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     url = f"http://127.0.0.1:{PORT}/"
     print(f"Stock Signal Lab is running at {url}")
