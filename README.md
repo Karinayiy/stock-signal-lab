@@ -8,6 +8,10 @@ The dashboard is a static site in `web/`. It opens with a **risk planner**: pick
 
 `.github/workflows/site.yml` rebuilds the study after every US trading day (22:30 UTC, Monday to Friday), saves the growing news archive back to the repo, and publishes `web/` to GitHub Pages. It needs no API key. To turn it on: repo **Settings → Pages → Source: GitHub Actions**, then **Actions → Update website → Run workflow**. (GitHub Pages on a free account needs a public repo; `.env` is never committed.)
 
+## Your portfolio and live prices (local app)
+
+In the local app, the **Portfolio** section takes your holdings (type `AAPL 10 150` per line, or import a broker CSV with Symbol and Quantity columns) and shows value, today's change, gain vs cost, volatility vs the S&P 500, a bad-day estimate, each holding's share of the risk, correlations, and how today's mix did over the past year. Prices come from Yahoo Finance: free, no key, and usually real-time or up to 15 minutes late. The planner also switches to live prices, refreshed every minute. Holdings are saved only in your browser and sent only to the app on your own computer (`src/portfolio.py`), never to the public website. It describes risk; it does not say what to buy or sell.
+
 ## Start the app
 
 Double-click **`Stock Signal Lab.command`** in Finder, or run:
@@ -51,6 +55,7 @@ cd src && ../.venv/bin/python build.py --refresh   # download, analyse, train, w
 | `src/features.py` | 18 features, all known at that day's close (no look-ahead) |
 | `src/build.py` | Correlations, IC, walk-forward direction models, backtest, volatility study, JSON export |
 | `src/sentiment.py` | News sentiment: Claude scorer with VADER fallback, daily headline archive |
+| `src/portfolio.py` | Live quotes and portfolio risk analysis for the local app |
 | `src/llm_forecast.py` | Claude-as-forecaster experiment vs the ML models (3 groups, cost tracking) |
 | `tests/test_no_lookahead.py` | Proves no feature uses future data |
 | `Save API Key.command` | Saves the API key on the clipboard into `.env` |

@@ -5,6 +5,8 @@ page can't do:
   * Refresh data      re-download prices/news and rerun the whole study
   * Ask Claude now    live Claude forecast for one stock, using today's numbers
   * Run experiment    the full Claude-vs-ML forecasting experiment (llm_forecast.py)
+  * Live quotes       near real-time prices from Yahoo Finance (free, no key)
+  * Portfolio         risk analysis of your own holdings; they never leave this computer
 
 Run:  .venv/bin/python app.py      (or double-click "Stock Signal Lab.command")
 Only listens on this computer (127.0.0.1); nothing is exposed to the network.
@@ -24,6 +26,8 @@ SRC, WEB = ROOT / "src", ROOT / "web"
 sys.path.insert(0, str(SRC))
 
 from config import TICKERS  # noqa: E402  (also loads .env)
+import portfolio  # noqa: E402
+from urllib.parse import parse_qs, urlparse  # noqa: E402
 
 PORT = int(os.environ.get("SSL_PORT", "8770"))
 JOB = {"name": None, "running": False, "log": [], "started": None, "finished": None, "ok": None}
@@ -84,6 +88,15 @@ def live_forecast(ticker):
             "rationale": why, "model": model}
 
 
+def vol_forecasts():
+    """Latest volatility forecasts from the study, for the tickers it covers."""
+    try:
+        d = json.loads((WEB / "data.json").read_text())
+        return {t: v["pred"] for t, v in d["volatility"]["latest"].items()}
+    except (OSError, KeyError, ValueError):
+        return {}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(WEB), **kw)
@@ -110,6 +123,10 @@ class Handler(SimpleHTTPRequestHandler):
             with JOB_LOCK:
                 job = dict(JOB)
             return self.send_json({"app": True, "has_key": has_key(), "job": job, "tickers": TICKERS})
+        if self.path.startswith("/api/quotes"):
+            raw = parse_qs(urlparse(self.path).query).get("t", [""])[0].split(",")
+            ts = [t for t in (portfolio.clean_ticker(x) for x in raw) if t][:60]
+            return self.send_json({"time": time.time(), "quotes": portfolio.quotes(ts)})
         return super().do_GET()
 
     def do_POST(self):
@@ -138,6 +155,15 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 return self.send_json(live_forecast(t))
             except Exception as e:  # report API or data problems to the page instead of crashing
+                return self.send_json({"error": f"{type(e).__name__}: {e}"}, 502)
+
+        if self.path == "/api/portfolio":
+            h = body.get("holdings")
+            if not isinstance(h, list) or not h:
+                return self.send_json({"error": "Send a list of holdings."}, 400)
+            try:
+                return self.send_json(portfolio.analyse(h, vol_forecasts()))
+            except Exception as e:  # network or data problems
                 return self.send_json({"error": f"{type(e).__name__}: {e}"}, 502)
 
         return self.send_json({"error": "Not found."}, 404)
