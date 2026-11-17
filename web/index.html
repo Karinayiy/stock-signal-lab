@@ -1,3 +1,6 @@
+<!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Stock Signal Lab</title>
@@ -136,8 +139,46 @@ td.win { color: var(--good); font-weight: 500; } td.lose { color: var(--ink-3); 
 code { font: 13px var(--f-mono); background: var(--grid); padding: 1px 5px; border-radius: 4px; }
 #err { color: var(--bad); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-</style>
 
+/* top nav */
+nav.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+nav.top .in { max-width: 1180px; margin: 0 auto; padding: 10px max(16px, env(safe-area-inset-left, 0px));
+  display: flex; gap: 6px 16px; align-items: center; flex-wrap: wrap; }
+nav.top b { font-family: var(--f-display); margin-right: auto; }
+nav.top a { color: var(--ink-2); text-decoration: none; font-size: 13px; }
+nav.top a:hover { color: var(--accent); }
+html { scroll-padding-top: 64px; }
+@media (max-width: 560px) { nav.top .links { display: none; } }
+
+/* risk planner */
+.form { display: grid; gap: 14px; align-content: start; }
+.form label { display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.form select, .form input[type=number] { font: 15px var(--f-mono); padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); width: 100%; }
+.form input[type=range] { width: 100%; accent-color: var(--accent); }
+.form .row { display: flex; justify-content: space-between; gap: 8px; }
+.result { display: grid; gap: 4px; padding: 14px; border-radius: 8px; background: var(--accent-soft); }
+.result .big { font: 600 32px var(--f-display); font-variant-numeric: tabular-nums; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; }
+.facts div { display: grid; gap: 2px; font-size: 12px; color: var(--ink-3); }
+.facts b { font: 500 16px var(--f-mono); color: var(--ink); }
+.range { position: relative; height: 34px; }
+.range i { position: absolute; top: 12px; height: 10px; border-radius: 5px; }
+.range .r95 { background: var(--grid); } .range .r68 { background: var(--accent); opacity: .45; }
+.range .now { position: absolute; top: 6px; width: 2px; height: 22px; background: var(--ink); }
+#today tbody tr { cursor: pointer; } #today tbody tr:hover td { background: var(--grid); }
+#today tr[aria-selected="true"] td { background: var(--accent-soft); }
+.regime { font: 500 12px var(--f-mono); }
+</style>
+<meta name="description" content="Can data or an AI predict stocks? A student research project with walk-forward backtests, a volatility forecast and a daily risk planner.">
+</head>
+<body>
+
+
+<nav class="top"><div class="in"><b>Stock Signal Lab</b><span class="links">
+  <a href="#planner">Today</a> <a href="#verdict-sec">Verdict</a> <a href="#explorer">Explorer</a>
+  <a href="#vol">Volatility</a> <a href="#claude">Claude</a> <a href="#method">Method</a></span></div></nav>
 <div class="wrap">
   <header>
     <div class="eyebrow">Student research project</div>
@@ -148,15 +189,41 @@ code { font: 13px var(--f-mono); background: var(--grid); padding: 1px 5px; bord
     <div class="panel appbar" id="appbar" hidden></div>
   </header>
 
+
+  <!-- 0. Today: risk planner (the app) -->
+  <section id="planner">
+    <div class="sec-head"><div class="eyebrow">0 · Today</div><h2>Risk planner</h2>
+      <p class="muted">Direction can't be predicted, but how much a stock will move can. Pick a stock, an amount and how bumpy a ride you accept, and this sizes the position from next week's volatility forecast.</p></div>
+    <div style="display:grid;gap:16px">
+      <div class="panel">
+        <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:24px">
+          <div class="form">
+            <label>Stock <select id="pStock"></select></label>
+            <label>Amount you'd put in this stock ($) <input id="pAmt" type="number" min="0" step="100" value="10000" inputmode="decimal"></label>
+            <label><span class="row"><span>Volatility you accept (per year)</span><b class="num" id="pTgtV">20%</b></span>
+              <input id="pTgt" type="range" min="5" max="60" step="1" value="20" aria-describedby="pTgtV"></label>
+            <p class="muted">The S&amp;P 500 runs at about 15–20% a year. A single big tech stock is often 30–50%.</p>
+          </div>
+          <div id="pOut" style="display:grid;gap:12px;align-content:start"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>All stocks today</h3>
+        <div class="tbl"><table id="today"></table></div>
+        <p class="muted">Regime ranks today's forecast against the stock's own past forecasts: Calm is the lowest quarter, Elevated the top quarter, Stormy the top tenth. Up chance is the direction model, shown for honesty: it has no proven edge.</p>
+      </div>
+    </div>
+  </section>
+
   <!-- 1. Verdict -->
-  <section>
+  <section id="verdict-sec">
     <div class="sec-head"><div class="eyebrow">1 · Verdict</div><h2>Does the model beat a naive guess?</h2></div>
     <div class="tiles" id="tiles"></div>
     <div class="verdict" id="verdict"></div>
   </section>
 
   <!-- 2. Explorer -->
-  <section>
+  <section id="explorer">
     <div class="sec-head"><div class="eyebrow">2 · Stock explorer</div><h2>One stock, end to end</h2>
       <p class="muted">Pick a stock. Everything in sections 2 and 3 follows this choice.</p></div>
     <div class="picker" id="picker" role="group" aria-label="Choose stock"></div>
@@ -249,7 +316,7 @@ code { font: 13px var(--f-mono); background: var(--grid); padding: 1px 5px; bord
   </section>
 
   <!-- 6. Volatility -->
-  <section>
+  <section id="vol">
     <div class="sec-head"><div class="eyebrow">6 · Volatility</div><h2>How much it moves is predictable</h2>
       <p>Direction is close to a coin flip, but the size of the next move is not. Calm weeks tend to follow calm weeks and wild weeks follow wild weeks. The same features and the same walk-forward test predict next week's volatility well.</p></div>
     <div class="tiles" id="volTiles"></div>
@@ -276,7 +343,7 @@ code { font: 13px var(--f-mono); background: var(--grid); padding: 1px 5px; bord
   </section>
 
   <!-- 7. Claude as forecaster -->
-  <section>
+  <section id="claude">
     <div class="sec-head"><div class="eyebrow">7 · Large language model</div><h2>Can Claude beat the model?</h2>
       <p>Claude gets the same numbers as the ML model, written as a short analyst briefing, and gives a probability that the stock rises over the next 5 days. To stop it from "remembering" the answers, only dates after its training-data cutoff are tested.</p></div>
     <div class="grid2">
@@ -290,7 +357,7 @@ code { font: 13px var(--f-mono); background: var(--grid); padding: 1px 5px; bord
   </section>
 
   <!-- 8. Method -->
-  <section>
+  <section id="method">
     <div class="sec-head"><div class="eyebrow">8 · Method</div><h2>How this was built</h2></div>
     <div class="panel method" id="method"></div>
   </section>
@@ -355,7 +422,7 @@ function renderTiles() {
 function renderPicker() {
   $("#picker").innerHTML = D.meta.tickers.map(t => `<button type="button" id="pk-${t}" aria-pressed="${t === cur}" data-t="${t}">${t}</button>`).join("");
   $("#picker").onclick = e => { const t = e.target.dataset?.t; if (!t) return; cur = t;
-    try { localStorage.setItem("ssl-ticker", t); } catch (_) {} renderPicker(); renderStock(); };
+    try { localStorage.setItem("ssl-ticker", t); } catch (_) {} renderPicker(); renderStock(); renderPlanner(); };
 }
 
 function renderStock() {
@@ -608,7 +675,56 @@ function drawLive() {
   };
 }
 
-function renderAll() { if (!D) return; renderTiles(); renderStatic(); renderPicker(); renderStock(); renderLLM(); renderApp(); }
+
+// ---- Today: risk planner, runs entirely in the browser ----
+function pctRank(arr, v) { const a = arr.filter(x => x != null); return a.length ? a.filter(x => x <= v).length / a.length : null; }
+function regime(t) { const L = D.volatility.latest[t], r = pctRank(D.volatility.series[t].gbm, L.pred);
+  return { r, label: r == null ? "–" : r < 0.25 ? "Calm" : r < 0.75 ? "Normal" : r < 0.9 ? "Elevated" : "Stormy" }; }
+const money = x => "$" + Math.round(x).toLocaleString("en-US");
+function renderPlanner() {
+  if (!D.volatility?.latest) return;
+  const sel = $("#pStock");
+  if (!sel.options.length) {
+    sel.innerHTML = D.meta.tickers.map(t => `<option>${t}</option>`).join("");
+    try { const v = JSON.parse(localStorage.getItem("ssl-plan") || "{}"); if (v.amt) $("#pAmt").value = v.amt; if (v.tgt) $("#pTgt").value = v.tgt; } catch (_) {}
+    sel.onchange = () => { cur = sel.value; try { localStorage.setItem("ssl-ticker", cur); } catch (_) {} renderPicker(); renderStock(); renderPlanner(); };
+    $("#pAmt").oninput = $("#pTgt").oninput = () => { try { localStorage.setItem("ssl-plan", JSON.stringify({ amt: $("#pAmt").value, tgt: $("#pTgt").value })); } catch (_) {} renderPlanner(); };
+  }
+  sel.value = cur;
+  const L = D.volatility.latest[cur], T = D.tickers[cur], price = T.close[T.close.length - 1];
+  const amt = Math.max(0, +$("#pAmt").value || 0), tgt = +$("#pTgt").value / 100;
+  $("#pTgtV").textContent = Math.round(tgt * 100) + "%";
+  const w = Math.min(1, tgt / L.pred), wk = L.pred * Math.sqrt(5 / 252), g = regime(cur);
+  const lo68 = price * Math.exp(-wk), hi68 = price * Math.exp(wk), lo95 = price * Math.exp(-2 * wk), hi95 = price * Math.exp(2 * wk);
+  const sc = x => ((x - lo95 * 0.98) / (hi95 * 1.02 - lo95 * 0.98) * 100).toFixed(1) + "%";
+  $("#pOut").innerHTML = `
+    <div class="result"><div class="muted">Suggested position in ${cur}</div><div class="big">${money(amt * w)}</div>
+      <div class="muted">${pct(w, 0)} of ${money(amt)}${w >= 1 ? " (capped at 100%, no borrowing)" : `; keep ${money(amt * (1 - w))} in cash`}</div></div>
+    <div class="facts">
+      <div>Forecast volatility, next week<b>${pct(L.pred, 0)}</b></div>
+      <div>Last 20 days<b>${pct(L.vol_20, 0)}</b></div>
+      <div>Regime<b>${g.label}</b></div>
+      <div>Typical 5-day move<b>±${pct(wk, 1)}</b></div>
+    </div>
+    <div style="display:grid;gap:4px">
+      <div class="muted">Likely price range by next week (last close ${"$" + price.toFixed(2)}, ${esc(L.date)})</div>
+      <div class="range" role="img" aria-label="2 in 3 chance between $${lo68.toFixed(0)} and $${hi68.toFixed(0)}; 19 in 20 between $${lo95.toFixed(0)} and $${hi95.toFixed(0)}">
+        <i class="r95" style="left:${sc(lo95)};width:calc(${sc(hi95)} - ${sc(lo95)})"></i>
+        <i class="r68" style="left:${sc(lo68)};width:calc(${sc(hi68)} - ${sc(lo68)})"></i>
+        <span class="now" style="left:${sc(price)}"></span></div>
+      <div class="muted num" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px">
+        <span>2 in 3: $${lo68.toFixed(0)}–$${hi68.toFixed(0)}</span><span>19 in 20: $${lo95.toFixed(0)}–$${hi95.toFixed(0)}</span></div>
+    </div>
+    <p class="muted">Position = amount × min(1, accepted ÷ forecast). Ranges assume no drift, since direction isn't predictable. Not investment advice.</p>`;
+  const S = D.sentiment || {};
+  $("#today").innerHTML = `<thead><tr><th>Stock</th><th>Close</th><th>Vol forecast</th><th>Regime</th><th>Size at ${Math.round(tgt * 100)}%</th><th>Up chance</th><th>News</th></tr></thead><tbody>` +
+    D.meta.tickers.map(t => { const l = D.volatility.latest[t], c = D.tickers[t].close, r = regime(t), n = S[t]?.llm_avg ?? S[t]?.avg;
+      return `<tr data-t="${t}" aria-selected="${t === cur}"><td><b>${t}</b></td><td>$${c[c.length - 1].toFixed(2)}</td><td>${pct(l.pred, 0)}</td>
+        <td class="regime">${r.label}</td><td>${pct(Math.min(1, tgt / l.pred), 0)}</td><td class="lose">${pct(D.tickers[t].latest.prob, 0)}</td><td>${n == null ? "–" : f3(n).slice(0, -1)}</td></tr>`; }).join("") + "</tbody>";
+  $("#today").onclick = e => { const t = e.target.closest("tr")?.dataset?.t; if (!t) return; sel.value = t; sel.onchange(); };
+}
+
+function renderAll() { if (!D) return; renderPlanner(); renderTiles(); renderStatic(); renderPicker(); renderStock(); renderLLM(); renderApp(); }
 
 fetch("data.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(d => {
   D = d; try { const s = localStorage.getItem("ssl-ticker"); if (s && D.tickers[s]) cur = s; } catch (_) {}
@@ -618,3 +734,5 @@ fetch("data.json").then(r => { if (!r.ok) throw new Error(r.status); return r.js
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
 new MutationObserver(renderAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 </script>
+</body>
+</html>

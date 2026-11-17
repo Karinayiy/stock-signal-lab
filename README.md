@@ -2,6 +2,12 @@
 
 Can technical indicators, macro data, earnings surprises, news sentiment, or a large language model predict where a stock goes over the next 5 trading days? This project tests that honestly, with walk-forward backtests on data the models never saw.
 
+## Website
+
+The dashboard is a static site in `web/`. It opens with a **risk planner**: pick a stock, an amount and the volatility you accept, and it sizes the position from next week's volatility forecast and shows the likely price range. Everything runs in the browser.
+
+`.github/workflows/site.yml` rebuilds the study after every US trading day (22:30 UTC, Monday to Friday), saves the growing news archive back to the repo, and publishes `web/` to GitHub Pages. It needs no API key. To turn it on: repo **Settings → Pages → Source: GitHub Actions**, then **Actions → Update website → Run workflow**. (GitHub Pages on a free account needs a public repo; `.env` is never committed.)
+
 ## Start the app
 
 Double-click **`Stock Signal Lab.command`** in Finder, or run:
@@ -48,7 +54,8 @@ cd src && ../.venv/bin/python build.py --refresh   # download, analyse, train, w
 | `src/llm_forecast.py` | Claude-as-forecaster experiment vs the ML models (3 groups, cost tracking) |
 | `tests/test_no_lookahead.py` | Proves no feature uses future data |
 | `Save API Key.command` | Saves the API key on the clipboard into `.env` |
-| `web/index.html` | Dashboard (also published as a read-only page) |
+| `web/index.html` | Website: risk planner plus the full study |
+| `.github/workflows/site.yml` | Daily rebuild and deploy to GitHub Pages |
 
 ## Findings so far
 
@@ -73,7 +80,7 @@ cd src && ../.venv/bin/python build.py --refresh   # download, analyse, train, w
 
 ## Ideas to extend
 
-1. Run the app daily so the news archive grows, then test Claude news sentiment as a feature.
+1. Once the news archive (grown daily by the workflow) covers a few months, test Claude news sentiment as a feature.
 2. Add more stocks (for example all of the S&P 500) to reduce survivorship bias.
 3. Try longer horizons (1–3 months), where valuation and earnings may matter more.
 4. Combine Claude's news relevance filter with the daily archive to test whether only-relevant news sentiment predicts anything.
